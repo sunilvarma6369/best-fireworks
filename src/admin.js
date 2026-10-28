@@ -6,9 +6,11 @@ import {
   onSnapshot, orderBy, query, serverTimestamp, setDoc, Timestamp, writeBatch,
 } from 'firebase/firestore';
 import { getMessaging, getToken, isSupported } from 'firebase/messaging';
+import { App as CapApp } from '@capacitor/app';
+import { PushNotifications } from '@capacitor/push-notifications';
 import { SITE_URL, vapidKey } from './config.js';
 import {
-  applyCatalogOverrides, escapeHtml, indexPriceList, loadPriceList, prettyPhone, telLink, waLink,
+  applyCatalogOverrides, escapeHtml, indexPriceList, isNativeApp, loadPriceList, prettyPhone, telLink, waLink,
 } from './lib/catalog.js';
 import { cleanCodeInput, newOrderCode, normalizeOrderCode } from './lib/codes.js';
 import { app, EMULATOR_HOST, useEmulators } from './lib/firebase-app.js';
@@ -379,7 +381,7 @@ function changeStatus(code, status) {
   if (status === 'cancelled' && !confirm(`Cancel order ${code}?`)) return;
   const message = $('#d-message').value.trim();
   // Open WhatsApp first, inside the tap, so the browser does not block it as a pop-up.
-  if ($('#d-send-wa').checked) window.open(customerWa(o, customerMessage(o, status, message)), '_blank', 'noopener');
+  if ($('#d-send-wa').checked) openExternal(customerWa(o, customerMessage(o, status, message)));
 
   const batch = writeBatch(db);
   batch.update(doc(db, 'orders', code), {
@@ -863,6 +865,13 @@ function announce(added) {
 }
 
 function updateAlertUi() {
+  if (isNativeApp) {
+    $('#alert-setup').hidden = nativePushOn;
+    const pill = $('#alert-pill');
+    pill.textContent = nativePushOn ? '🔔 Alerts on' : '🔕 Alerts off';
+    pill.classList.toggle('on', nativePushOn);
+    return;
+  }
   const soundOn = audioCtx?.state === 'running';
   const notifOn = 'Notification' in window && Notification.permission === 'granted';
   $('#alert-setup').hidden = soundOn && (notifOn || !('Notification' in window));
@@ -872,6 +881,7 @@ function updateAlertUi() {
 }
 
 async function registerPush({ ask }) {
+  if (isNativeApp) return registerNativePush({ ask });
   const status = $('#push-status');
   if (!('serviceWorker' in navigator) || !('Notification' in window)) {
     status.textContent = 'This browser cannot show notifications. Keep this page open to hear the sound.';
@@ -906,6 +916,75 @@ async function registerPush({ ask }) {
   }
 }
 
+// ── BFW Admin Android app ────────────────────────────────
+// Real Android notifications via Firebase Cloud Messaging. The Cloud Function (functions/index.js) sends one per
+// new order to every token saved here; tapping it opens that order.
+let nativePushOn = false;
+const openExternal = (url) => (isNativeApp ? (location.href = url) : window.open(url, '_blank', 'noopener'));
+
+async function registerNativePush({ ask }) {
+  const status = $('#push-status');
+  try {
+    let perm = await PushNotifications.checkPermissions();
+    if (perm.receive !== 'granted' && ask) perm = await PushNotifications.requestPermissions();
+    if (perm.receive !== 'granted') {
+      nativePushOn = false;
+      updateAlertUi();
+      status.textContent = 'Notifications are off. Tap “Turn on alerts”, or allow them in Android Settings → Apps → BFW Admin → Notifications.';
+      return;
+    }
+    await PushNotifications.createChannel({
+      id: 'orders', name: 'New orders', description: 'A customer booked an order',
+      importance: 5, visibility: 1, vibration: true, lights: true, lightColor: '#E3A21A',
+    });
+    await PushNotifications.register(); // the token arrives in the 'registration' listener below
+  } catch (err) {
+    console.error(err);
+    status.textContent = `Notification setup failed: ${err.message}`;
+  }
+}
+
+function setupNativeApp() {
+  document.body.classList.add('native-app');
+  PushNotifications.addListener('registration', async ({ value: token }) => {
+    if (!state.user) return;
+    try {
+      await setDoc(doc(db, 'adminTokens', token), {
+        uid: state.user.uid, email: state.user.email ?? '', platform: 'android', device: 'BFW Admin app',
+        updatedAt: serverTimestamp(),
+      });
+      nativePushOn = true;
+      updateAlertUi();
+      $('#push-status').textContent = '✓ This phone gets a notification for every new order, even when the app is closed.';
+    } catch (err) {
+      $('#push-status').textContent = `Could not save this phone for notifications: ${err.message}`;
+    }
+  });
+  PushNotifications.addListener('registrationError', (err) => {
+    $('#push-status').textContent = `Notification setup failed: ${err.error ?? err.message ?? err}`;
+  });
+  // Tapped a "New order" notification: open that order (now, or as soon as orders load after login).
+  PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
+    const code = normalizeOrderCode(notification?.data?.code);
+    if (!code) return;
+    if (state.orders.has(code)) openOrder(code);
+    else state.deepLinkCode = code;
+  });
+  // Android back button closes an open order/item first, then sends the app to the background.
+  CapApp.addListener('backButton', () => {
+    const open = document.querySelector('dialog[open]');
+    if (open) open.close();
+    else CapApp.minimizeApp();
+  });
+  // WhatsApp / maps links open in their own apps instead of inside this app.
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[target="_blank"]');
+    if (!a) return;
+    e.preventDefault();
+    location.href = a.href;
+  }, true);
+}
+
 let wakeLock = null;
 async function keepAwake() {
   try {
@@ -930,6 +1009,8 @@ function setupAlerts() {
     chime(true);
     registerPush({ ask: true });
   });
+  // In the app, ask for notification permission straight after the first login.
+  if (isNativeApp) registerPush({ ask: true });
   // Browsers only allow sound after a tap, so any tap on the page unlocks it.
   document.addEventListener('pointerdown', unlockAudio, { capture: true });
   document.addEventListener('visibilitychange', () => {
@@ -953,6 +1034,7 @@ document.querySelectorAll('.a-tab').forEach((tab) =>
 if (!app) {
   show('setup-view');
 } else {
+  if (isNativeApp) setupNativeApp();
   setupOrderUi();
   setupProductUi();
   setupDashboardUi();

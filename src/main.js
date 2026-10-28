@@ -1,4 +1,4 @@
-import { APK_URL, ORDER_OPTIONS, SITE_URL } from './config.js';
+import { ORDER_OPTIONS, SITE_URL } from './config.js';
 import {
   applyCatalogOverrides, categoryIcon, escapeHtml, extTarget, indexPriceList, isNativeApp, loadPriceList, prettyPhone,
   telLink, waLink,
@@ -104,11 +104,6 @@ function renderStoreInfo() {
   wa.href = store.whatsappOrderUrl;
   if (extTarget) { wa.target = '_blank'; wa.rel = 'noopener'; }
 
-  if (APK_URL && !isNativeApp) {
-    const apk = $('#apk-link');
-    apk.href = APK_URL;
-    apk.hidden = false;
-  }
 
   const { offer } = state.data;
   if (offer && (!offer.validUntil || todayIST() <= offer.validUntil)) {

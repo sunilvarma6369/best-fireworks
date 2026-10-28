@@ -1,8 +1,8 @@
 name: Build and deploy
 
-# Every push to main builds the website and the signed Android APK, and deploys the website to Firebase Hosting.
-# The APK is kept as a run artifact (Actions → run → Artifacts). Firebase's free Spark plan does not allow hosting
-# .apk files, so the shop uploads it to Google Drive and bestfireworks.web.app/app redirects there (firebase.json).
+# Every push to main builds the customer website and the signed "BFW Admin" Android app (staff only), and deploys the
+# website to Firebase Hosting. The APK is kept as a run artifact (Actions → run → Artifacts); staff install it by hand
+# from a Google Drive file shared only with them.
 on:
   push:
     branches: [main]
@@ -35,12 +35,16 @@ jobs:
           java-version: 21
 
       - run: npm ci
-      - run: npm run build
+      # Builds dist/ (website) and dist-app/ (same build, admin page as the app's start page)
+      - run: npm run build:app
 
       # ── Android APK ────────────────────────────────────────────────────────────
       # The native Android project is generated fresh on every build, so nothing Android-specific lives in the repo.
       - name: Create Android project
-        run: npx cap add android
+        run: |
+          npx cap add android
+          # Firebase config for push notifications (not secret; Capacitor applies the google-services plugin when present)
+          cp android-config/google-services.json android/app/google-services.json
 
       - name: App icon and splash screen
         continue-on-error: true
@@ -79,16 +83,16 @@ jobs:
           export KS_PASS KEY_PASS
           "$BUILD_TOOLS/zipalign" -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
           "$BUILD_TOOLS/apksigner" sign --ks release.jks --ks-pass env:KS_PASS --ks-key-alias "$KEY_ALIAS" \
-            --key-pass env:KEY_PASS --out BestFireWorks.apk aligned.apk
-          "$BUILD_TOOLS/apksigner" verify --print-certs BestFireWorks.apk | head -3
+            --key-pass env:KEY_PASS --out BFW-Admin.apk aligned.apk
+          "$BUILD_TOOLS/apksigner" verify --print-certs BFW-Admin.apk | head -3
           rm -f release.jks
 
       # Added after `cap sync`, so the APK is served by the website but not packed inside itself.
       # Download from the run page, then upload to Google Drive (README step 5). Not shown to customers.
       - uses: actions/upload-artifact@v4
         with:
-          name: BestFireWorks-apk-v${{ github.run_number }}
-          path: BestFireWorks.apk
+          name: BFW-Admin-apk-v${{ github.run_number }}
+          path: BFW-Admin.apk
           retention-days: 30
 
       # ── Deploy website ─────────────────────────────────────────────────────────

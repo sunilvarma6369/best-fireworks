@@ -6,6 +6,107 @@ Website and Android app for **Best FireWorks** (Sivakasi Factory Outlet, Bachupa
 |---|---|
 | `/` | Price list (Standard / Other Brands), search, cart, 10% bulk offer, booking form |
 | `/track?code=BFW-XXXXXX` | Order status for the customer (no login, no personal details shown) |
+| `/admin` (and the BFW Admin app) | Shop login: live orders with sound and notification alerts, status updates with WhatsApp messages, 📊 sales dashboard, item and price editor, sold-out items, home-delivery switch, pause bookings, CSV export |
+
+**Built with:** plain HTML/CSS/JS with Vite, Firebase (Firestore, Auth, Hosting, optional Cloud Function for push), and Capacitor for the Android APK. GitHub Actions deploys the website and builds the APK.
+
+---
+
+## Run it on your PC (no Firebase project needed)
+
+You need Node 20.19+ (22+ recommended), Java 21 and the Firebase CLI (`npm i -g firebase-tools`).
+
+```bash
+npm install
+npm run emulators        # terminal 1: local Firestore + Auth (UI at http://127.0.0.1:4000)
+npm run seed             # once: creates admin@bestfireworks.test / diwali2026
+npm run dev              # terminal 2: http://localhost:5173
+npm run test:e2e         # optional: automated booking -> tracking -> admin -> security-rules test
+```
+
+- Shop: http://localhost:5173 · Admin: http://localhost:5173/admin.html · Tracking: http://localhost:5173/track.html
+- From a phone on the same Wi-Fi, use the "Network" address that `npm run dev` prints.
+- `npm run dev` always uses the local emulators, so testing never touches real orders. Emulator data is wiped when you stop them. `npm run dev:live` runs the local site against the real Firebase project.
+
+---
+
+## Publish
+
+### 1. Firebase project (`best-fireworks-98d13`)
+Already done: the project exists, a web app named "Best FireWorks" is registered, and its config is in `src/config.js` and `.firebaserc`.
+
+The website is **https://bestfireworks.web.app**. `best-fireworks.web.app` and `best-fireworks-98d13.web.app` are extra Hosting sites in the same project that forward there (see `firebase.json`).
+
+1. **Build → Firestore Database → Create database**. Choose location **asia-south1 (Mumbai)** and production mode.
+2. **Build → Authentication → Get started → Email/Password → Enable.**
+3. Deploy the security rules (once, and again whenever `firestore.rules` changes):
+   ```bash
+   firebase login
+   firebase deploy --only firestore
+   ```
+
+### 2. Shop logins
+1. **Authentication → Users → Add user**: enter the owner's email and a password.
+2. Open `https://bestfireworks.web.app/admin` and sign in. The page shows a **user ID**. Copy it.
+3. **Firestore → Start collection** `admins` → Document ID = that user ID → add a field `name` (string) = the owner's name. Reload the admin page.
+
+Repeat for each staff member.
+
+### 3. GitHub
+1. Create a **public** repository named `best-fireworks`. Public repos get **unlimited free GitHub Actions minutes** (private repos only get a monthly quota), and customers never see GitHub: the APK is served from the website. The code holds no secrets: the Firebase web config is public by design, and the signing key and service account go in GitHub Secrets.
+2. Push this folder:
+   ```bash
+   git init && git add . && git commit -m "Best FireWorks website and app"
+   git branch -M main
+   git remote add origin https://github.com/<you>/best-fireworks.git
+   git push -u origin main
+   ```
+
+### 4. Auto-deploy from GitHub
+Every push to `main` runs **Actions → Build and deploy**. It builds the website and the APK, puts the APK on the website, and deploys both to Firebase Hosting. This needs one secret:
+
+1. Firebase console → ⚙️ **Project settings → Service accounts → Generate new private key**.
+2. GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**: name `FIREBASE_SERVICE_ACCOUNT`, value = the whole JSON file. Then delete the downloaded file.
+
+Without the secret, the workflow still builds everything (the APK is under the run's **Artifacts**) but deploys nothing.
+
+Manual deploy from this PC: `npm run deploy`. It keeps the APK that is currently live, because the APK is only built on GitHub.
+
+### 5. "BFW Admin" Android app (staff only)
+Customers use the website. The Android app is the shop's business tool: it opens straight to the staff login, then shows Orders, Sales, Items & prices and Settings. A new-order notification opens that order, so staff can review it, call the customer or send a WhatsApp update, and confirm it.
+
+Every push to `main` builds a signed **BFW-Admin.apk** (package `com.bestfireworks.admin`; Firebase config in `android-config/google-services.json`).
+
+**Install on a staff phone**
+1. GitHub → **Actions** → latest **Build and deploy** run → **Artifacts** → download **BFW-Admin-apk-v…** and unzip it.
+2. Upload `BFW-Admin.apk` to Google Drive → **Share** → add only the staff Google accounts and keep General access **Restricted**.
+3. On the staff phone, open the file from Drive → **Install** (allow "Install unknown apps" for Drive if asked) → open **BFW Admin** → sign in → allow notifications.
+
+**Updating:** in Drive, right-click the file → **File information → Manage versions → Upload new version**, then reinstall it on each phone. App updates are rarely needed: prices, items and settings change live.
+
+**Set up a signing key once.** Without one, each build is signed with a new throwaway key, and phones must uninstall the old app before installing an update.
+
+```bash
+keytool -genkeypair -v -keystore bestfireworks.jks -alias bestfireworks -keyalg RSA -keysize 2048 -validity 10000
+# PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("bestfireworks.jks")) | Set-Clipboard
+```
+
+In GitHub, go to **Settings → Secrets and variables → Actions** and add:
+`ANDROID_KEYSTORE_BASE64` (the base64 text), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`bestfireworks`), `ANDROID_KEY_PASSWORD`.
+Keep `bestfireworks.jks` and its passwords safe and **out of git** (`.gitignore` already excludes `*.jks`). GitHub stores only an encrypted copy that nobody can download again, so back the file up, for example to Google Drive. If you lose them, you cannot ship updates to installed apps.
+
+The app loads the latest price list from the website each time it opens, so price corrections reach the app without a new APK.
+
+### 6. New-order notifications when the app is closed (needs Blaze)
+While the app or admin page is open, new orders ring straight away. To get a notification **even when the app is closed or the phone is locked**, the Cloud Function in `functions/` sends one per order, and that needs the **Blaze** (pay-as-you-go) plan. A shop's volume stays inside the free monthly quota, but a billing account is required. Set a small budget alert under Google Cloud → Billing → Budgets.
+1. Firebase console → **Upgrade** → Blaze.
+2. `npm run deploy:functions`
+3. Open BFW Admin on each staff phone once (it registers the phone for notifications automatically).
+4. Optional, for alerts in a desktop browser too: **Project settings → Cloud Messaging → Web Push certificates → Generate key pair**, paste the key into `vapidKey` in `src/config.js`, push, then tap **Turn on alerts** on the admin web page.
+
+---|---|
+| `/` | Price list (Standard / Other Brands), search, cart, 10% bulk offer, booking form |
+| `/track?code=BFW-XXXXXX` | Order status for the customer (no login, no personal details shown) |
 | `/admin` | Shop login: live orders with sound and notification alerts, status updates with WhatsApp messages, 📊 sales dashboard, item and price editor, sold-out items, home-delivery switch, pause bookings, CSV export |
 
 **Built with:** plain HTML/CSS/JS with Vite, Firebase (Firestore, Auth, Hosting, optional Cloud Function for push), and Capacitor for the Android APK. GitHub Actions deploys the website and builds the APK.
@@ -72,16 +173,17 @@ Without the secret, the workflow still builds everything (the APK is under the r
 
 Manual deploy from this PC: `npm run deploy`. It keeps the APK that is currently live, because the APK is only built on GitHub.
 
-### 5. Android APK (built on GitHub, shared from Google Drive)
-Every push to `main` builds a signed **BestFireWorks.apk**. Firebase's free Spark plan does not allow hosting `.apk` files, so the app is shared from Google Drive behind our own short link, **https://bestfireworks.web.app/app**.
+### 5. "BFW Admin" Android app (staff only)
+Customers use the website. The Android app is the shop's business tool: it opens straight to the staff login, then shows Orders, Sales, Items & prices and Settings. A new-order notification opens that order, so staff can review it, call the customer or send a WhatsApp update, and confirm it.
 
-**First time**
-1. GitHub → **Actions** → the latest **Build and deploy** run → **Artifacts** → download **BestFireWorks-apk-v…** and unzip it.
-2. Upload `BestFireWorks.apk` to Google Drive → **Share** → General access: **Anyone with the link** (Viewer) → **Copy link**.
-3. Put the file ID from that link into the `/app` redirect in `firebase.json` (`https://drive.google.com/uc?export=download&id=<FILE_ID>`) and set `APK_URL = '/app'` in `src/config.js`. The website then shows the "⬇ Android app" button.
+Every push to `main` builds a signed **BFW-Admin.apk** (package `com.bestfireworks.admin`; Firebase config in `android-config/google-services.json`).
 
-**Updating the app later** (only needed for app changes; prices and items update without a new app)
-- Download the new artifact, then in Drive right-click the existing file → **File information → Manage versions → Upload new version**. The link stays the same, so nothing else changes.
+**Install on a staff phone**
+1. GitHub → **Actions** → latest **Build and deploy** run → **Artifacts** → download **BFW-Admin-apk-v…** and unzip it.
+2. Upload `BFW-Admin.apk` to Google Drive → **Share** → add only the staff Google accounts and keep General access **Restricted**.
+3. On the staff phone, open the file from Drive → **Install** (allow "Install unknown apps" for Drive if asked) → open **BFW Admin** → sign in → allow notifications.
+
+**Updating:** in Drive, right-click the file → **File information → Manage versions → Upload new version**, then reinstall it on each phone. App updates are rarely needed: prices, items and settings change live.
 
 **Set up a signing key once.** Without one, each build is signed with a new throwaway key, and phones must uninstall the old app before installing an update.
 
