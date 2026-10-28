@@ -100,9 +100,30 @@ jobs:
         if: env.HAS_FIREBASE_KEY != 'true'
         run: echo "::warning::FIREBASE_SERVICE_ACCOUNT secret not set, so nothing was deployed. See README step 4."
 
-      - uses: FirebaseExtended/action-hosting-deploy@v0
+      # Plain Firebase CLI deploy. Problems are reported as annotations (shown on the run's summary page).
+      - name: Deploy to Firebase Hosting
         if: env.HAS_FIREBASE_KEY == 'true'
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          channelId: live
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          KEY="$RUNNER_TEMP/firebase-sa.json"
+          printf '%s' "$FIREBASE_SA" > "$KEY"
+          node -e '
+            try {
+              const k = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+              if (!k.client_email || !k.private_key) throw new Error("missing client_email/private_key");
+              console.log(`::notice title=Deploying as::${k.client_email} (project ${k.project_id})`);
+            } catch (e) {
+              console.log(`::error title=FIREBASE_SERVICE_ACCOUNT secret is not a valid key file::${e.message}`);
+              process.exit(1);
+            }' "$KEY"
+          export GOOGLE_APPLICATION_CREDENTIALS="$KEY"
+          set +e
+          npx --yes firebase-tools@15 deploy --only hosting --project best-fireworks-98d13 --non-interactive 2>&1 | tee deploy.log
+          code=${PIPESTATUS[0]}
+          rm -f "$KEY"
+          if [ "$code" -ne 0 ]; then
+            msg=$(grep -iE "error|denied|permission|forbidden|not have" deploy.log | tail -6 | tr '\n' ' ' | cut -c1-900)
+            echo "::error title=Firebase deploy failed::$msg"
+            exit "$code"
+          fi
