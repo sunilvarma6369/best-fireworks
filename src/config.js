@@ -19,11 +19,11 @@ export const vapidKey = 'YOUR-WEB-PUSH-VAPID-KEY';
 
 // Your live website. The Android app downloads the latest price list from here,
 // and order-tracking links sent to customers point here.
-export const SITE_URL = 'https://best-fireworks-98d13.web.app';
+export const SITE_URL = 'https://bestfireworks.web.app';
 
-// "Download Android app" link shown on the website. The GitHub workflow publishes the APK under this name.
-// Leave as '' to hide the link (for example while the GitHub repo is private).
-export const APK_URL = 'https://github.com/sunilvarma6369/best-fireworks/releases/latest/download/BestFireWorks.apk';
+// "Download Android app" link shown on the website. The GitHub workflow builds the APK and deploys it with the
+// website (see firebase.json: /app redirects here). Leave as '' to hide the link.
+export const APK_URL = '/download/BestFireWorks.apk';
 
 export const ORDER_OPTIONS = {
   // Pickup at the stall is always offered. Turn this on only if the shop delivers.

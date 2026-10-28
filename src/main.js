@@ -103,10 +103,16 @@ function renderStoreInfo() {
   wa.href = store.whatsappOrderUrl;
   if (extTarget) { wa.target = '_blank'; wa.rel = 'noopener'; }
 
-  if (APK_URL && !isNativeApp && !APK_URL.includes('YOUR-')) {
-    const apk = $('#apk-link');
-    apk.href = APK_URL;
-    apk.hidden = false;
+  if (APK_URL && !isNativeApp) {
+    // Only show the button once a build has actually been deployed with the site.
+    fetch(APK_URL, { method: 'HEAD', cache: 'no-store' })
+      .then((res) => {
+        if (!res.ok || (res.headers.get('content-type') ?? '').includes('text/html')) return;
+        const apk = $('#apk-link');
+        apk.href = APK_URL;
+        apk.hidden = false;
+      })
+      .catch(() => {});
   }
 
   const { offer } = state.data;

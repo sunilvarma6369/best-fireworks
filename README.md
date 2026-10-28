@@ -35,10 +35,11 @@ npm run test:e2e         # optional: automated booking -> tracking -> admin -> s
 ### 1. Firebase project (`best-fireworks-98d13`)
 Already done: the project exists, a web app named "Best FireWorks" is registered, and its config is in `src/config.js` and `.firebaserc`.
 
+The website is **https://bestfireworks.web.app**. `best-fireworks.web.app` and `best-fireworks-98d13.web.app` are extra Hosting sites in the same project that forward there (see `firebase.json`).
+
 1. **Build → Firestore Database → Create database**. Choose location **asia-south1 (Mumbai)** and production mode.
 2. **Build → Authentication → Get started → Email/Password → Enable.**
-3. In `src/config.js`, set `APK_URL` to your GitHub user or organisation and repo name.
-4. Deploy the security rules (once, and again whenever `firestore.rules` changes):
+3. Deploy the security rules (once, and again whenever `firestore.rules` changes):
    ```bash
    firebase login
    firebase deploy --only firestore
@@ -46,13 +47,13 @@ Already done: the project exists, a web app named "Best FireWorks" is registered
 
 ### 2. Shop logins
 1. **Authentication → Users → Add user**: enter the owner's email and a password.
-2. Open `https://<project-id>.web.app/admin` and sign in. The page shows a **user ID**. Copy it.
+2. Open `https://bestfireworks.web.app/admin` and sign in. The page shows a **user ID**. Copy it.
 3. **Firestore → Start collection** `admins` → Document ID = that user ID → add a field `name` (string) = the owner's name. Reload the admin page.
 
 Repeat for each staff member.
 
 ### 3. GitHub
-1. Create a **public** repository named `best-fireworks`. Public repos get **unlimited free GitHub Actions minutes** (private repos only get a monthly quota), and customers can download the APK from public Releases without a GitHub login. The code holds no secrets: the Firebase web config is public by design, and the signing key and service account go in GitHub Secrets.
+1. Create a **public** repository named `best-fireworks`. Public repos get **unlimited free GitHub Actions minutes** (private repos only get a monthly quota), and customers never see GitHub: the APK is served from the website. The code holds no secrets: the Firebase web config is public by design, and the signing key and service account go in GitHub Secrets.
 2. Push this folder:
    ```bash
    git init && git add . && git commit -m "Best FireWorks website and app"
@@ -61,14 +62,22 @@ Repeat for each staff member.
    git push -u origin main
    ```
 
-### 4. Auto-deploy the website from GitHub
-Run `firebase init hosting:github` in this folder and answer the prompts. It creates a secret named like `FIREBASE_SERVICE_ACCOUNT_BEST_FIREWORKS` in your repo. When it offers to write workflow files, say **no**, since `.github/workflows/deploy-web.yml` already exists. Then, in `deploy-web.yml`, change `secrets.FIREBASE_SERVICE_ACCOUNT` to the exact secret name it printed.
+### 4. Auto-deploy from GitHub
+Every push to `main` runs **Actions → Build and deploy**. It builds the website and the APK, puts the APK on the website, and deploys both to Firebase Hosting. This needs one secret:
 
-After that, every push to `main` publishes the website. You can also deploy by hand: `npm run deploy`.
+1. Firebase console → ⚙️ **Project settings → Service accounts → Generate new private key**.
+2. GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**: name `FIREBASE_SERVICE_ACCOUNT`, value = the whole JSON file. Then delete the downloaded file.
+
+Without the secret, the workflow still builds everything (the APK is under the run's **Artifacts**) but deploys nothing.
+
+Manual deploy from this PC: `npm run deploy`. It keeps the APK that is currently live, because the APK is only built on GitHub.
 
 ### 5. Android APK from GitHub
-Every push to `main` runs **Actions → Android APK** and publishes a release. The download link always points to the newest build:
-`https://github.com/<you>/best-fireworks/releases/latest/download/BestFireWorks.apk`
+The APK is published on the website. Share either link:
+- **https://bestfireworks.web.app/app** (short link)
+- https://bestfireworks.web.app/download/BestFireWorks.apk
+
+The "⬇ Android app" button on the website appears automatically once a build is live.
 
 **Set up a signing key once.** Without one, each build is signed with a new throwaway key, and phones must uninstall the old app before installing an update.
 
@@ -79,7 +88,7 @@ keytool -genkeypair -v -keystore bestfireworks.jks -alias bestfireworks -keyalg 
 
 In GitHub, go to **Settings → Secrets and variables → Actions** and add:
 `ANDROID_KEYSTORE_BASE64` (the base64 text), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`bestfireworks`), `ANDROID_KEY_PASSWORD`.
-Keep `bestfireworks.jks` and its passwords safe and **out of git**. If you lose them, you cannot ship updates to installed apps.
+Keep `bestfireworks.jks` and its passwords safe and **out of git** (`.gitignore` already excludes `*.jks`). GitHub stores only an encrypted copy that nobody can download again, so back the file up, for example to Google Drive. If you lose them, you cannot ship updates to installed apps.
 
 The app loads the latest price list from the website each time it opens, so price corrections reach the app without a new APK.
 
@@ -93,7 +102,7 @@ With the admin page open, new orders always ring and show an alert. To get notif
    firebase deploy --only functions
    ```
    If your Firestore location is not `asia-south1`, change `region` in `functions/index.js` first.
-4. On the shop phone, open `https://<project-id>.web.app/admin` in **Chrome**, sign in, tap **Turn on alerts**, then **⋮ → Add to Home screen**.
+4. On the shop phone, open `https://bestfireworks.web.app/admin` in **Chrome**, sign in, tap **Turn on alerts**, then **⋮ → Add to Home screen**.
 
 ---
 

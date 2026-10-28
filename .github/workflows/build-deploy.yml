@@ -1,7 +1,7 @@
-name: Android APK
+name: Build and deploy
 
-# Every push to main builds a new APK and publishes it as a GitHub Release.
-# Stable download link: https://github.com/<user>/<repo>/releases/latest/download/BestFireWorks.apk
+# Every push to main builds the website and the Android APK, puts the APK on the website at
+# /download/BestFireWorks.apk (short link: /app) and deploys both to Firebase Hosting together.
 on:
   push:
     branches: [main]
@@ -9,15 +9,17 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: android-apk
+  group: build-deploy
   cancel-in-progress: true
 
 jobs:
-  apk:
+  build-deploy:
     runs-on: ubuntu-latest
+    env:
+      HAS_FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -34,6 +36,7 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+      # ── Android APK ────────────────────────────────────────────────────────────
       # The native Android project is generated fresh on every build, so nothing Android-specific lives in the repo.
       - name: Create Android project
         run: npx cap add android
@@ -54,8 +57,8 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
 
-      # Uses your own signing key when the ANDROID_* secrets are set (README step 5), so phones can install
-      # updates over the old app. Without them a throwaway key is used and users must uninstall before updating.
+      # Uses your own signing key from the ANDROID_* secrets (README step 5), so phones can install updates over
+      # the old app. Without them a throwaway key is used and users must uninstall before updating.
       - name: Sign APK
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -76,21 +79,30 @@ jobs:
           "$BUILD_TOOLS/zipalign" -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
           "$BUILD_TOOLS/apksigner" sign --ks release.jks --ks-pass env:KS_PASS --ks-key-alias "$KEY_ALIAS" \
             --key-pass env:KEY_PASS --out BestFireWorks.apk aligned.apk
-          "$BUILD_TOOLS/apksigner" verify BestFireWorks.apk
+          "$BUILD_TOOLS/apksigner" verify --print-certs BestFireWorks.apk | head -3
           rm -f release.jks
 
+      # Added after `cap sync`, so the APK is served by the website but not packed inside itself.
+      - name: Put the APK on the website
+        run: |
+          mkdir -p dist/download
+          cp BestFireWorks.apk dist/download/BestFireWorks.apk
+
+      # Private copy for the repo owner (Actions tab → run → Artifacts). Not shown to customers.
       - uses: actions/upload-artifact@v4
         with:
           name: BestFireWorks-apk
           path: BestFireWorks.apk
+          retention-days: 30
 
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
+      # ── Deploy website + APK ───────────────────────────────────────────────────
+      - name: Firebase deploy key missing
+        if: env.HAS_FIREBASE_KEY != 'true'
+        run: echo "::warning::FIREBASE_SERVICE_ACCOUNT secret not set, so nothing was deployed. See README step 4."
+
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        if: env.HAS_FIREBASE_KEY == 'true'
         with:
-          tag_name: apk-build-${{ github.run_number }}
-          name: Best FireWorks app (build ${{ github.run_number }})
-          body: |
-            Android app for Best FireWorks. Download **BestFireWorks.apk** below and open it on your phone
-            (allow "Install unknown apps" for your browser if asked).
-          files: BestFireWorks.apk
-          make_latest: true
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          channelId: live
