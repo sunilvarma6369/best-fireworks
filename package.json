@@ -1,7 +1,7 @@
 {
   "name": "best-fireworks",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Best FireWorks – Diwali order booking website and Android app",
   "type": "module",
   "scripts": {
