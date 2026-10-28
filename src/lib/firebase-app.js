@@ -8,6 +8,9 @@ const devMode = import.meta.env?.DEV ?? globalThis.process?.env?.BFW_EMULATORS =
 export const useEmulators = devMode && (import.meta.env?.VITE_LIVE !== '1' || !isFirebaseConfigured);
 export const EMULATOR_HOST = globalThis.location?.hostname || '127.0.0.1';
 
-const demoConfig = { apiKey: 'demo-key', authDomain: 'demo-best-fireworks.firebaseapp.com', projectId: 'demo-best-fireworks', appId: 'demo' };
+const demoConfig = {
+  apiKey: 'demo-key', authDomain: 'demo-best-fireworks.firebaseapp.com', projectId: 'demo-best-fireworks',
+  storageBucket: 'demo-best-fireworks.appspot.com', appId: 'demo',
+};
 
 export const app = useEmulators ? initializeApp(demoConfig) : isFirebaseConfigured ? initializeApp(firebaseConfig) : null;

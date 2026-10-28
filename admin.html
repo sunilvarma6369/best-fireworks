@@ -150,6 +150,16 @@
             <select name="categoryId"></select>
           </label>
           <label>Item name <input name="name" maxlength="80" required autocomplete="off" /></label>
+          <div class="photo-field">
+            <div class="photo-preview" id="item-photo-preview" aria-hidden="true">No photo</div>
+            <div class="photo-actions">
+              <label class="btn btn-sm btn-soft">📷 <span id="item-photo-pick-label">Add photo</span>
+                <input type="file" accept="image/*" id="item-photo-input" hidden />
+              </label>
+              <button type="button" class="btn btn-sm btn-soft" data-act="remove-photo" id="item-photo-remove" hidden>Remove</button>
+              <p class="o-sub" id="item-photo-info">Optional. Shrunk to about 10 KB so the price list stays fast.</p>
+            </div>
+          </div>
           <div class="two-col">
             <label>Brand <input name="brand" maxlength="40" autocomplete="off" /></label>
             <label>Pieces per box <input name="pcsPerBox" type="number" inputmode="numeric" min="1" step="1" /></label>

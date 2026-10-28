@@ -415,6 +415,7 @@ body {
 .plist {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start; /* text-only cards stay compact next to photo cards */
   gap: 10px;
   margin: 0;
   padding: 0;
@@ -450,28 +451,18 @@ body {
 .prod.sold-out {
   opacity: 0.55;
 }
+/* Shop-uploaded photo (only on items that have one) */
 .prod-thumb {
-  position: relative;
-  display: grid;
-  place-items: center;
-  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
   border-radius: 10px;
-  background: var(--tint, #fff1ec);
-  font-size: 2.9rem;
-  line-height: 1;
+  background: var(--surface-2);
 }
-.ribbon {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  padding: 0.12rem 0.45rem;
-  border-radius: 6px;
-  background: var(--success);
-  color: #fff;
-  font-size: 0.68rem;
-  font-style: normal;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+.prod-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .prod-info {
   flex: 1;

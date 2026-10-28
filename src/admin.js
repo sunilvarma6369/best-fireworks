@@ -6,6 +6,7 @@ import {
   onSnapshot, orderBy, query, serverTimestamp, setDoc, Timestamp, writeBatch,
 } from 'firebase/firestore';
 import { getMessaging, getToken, isSupported } from 'firebase/messaging';
+import { connectStorageEmulator, deleteObject, getDownloadURL, getStorage, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { App as CapApp } from '@capacitor/app';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { SITE_URL, vapidKey } from './config.js';
@@ -23,7 +24,9 @@ import { itemSalesCsv, renderChips, renderDashboard } from './dashboard.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 const db = app ? getFirestore(app) : null;
 const auth = app ? getAuth(app) : null;
+const storage = app ? getStorage(app) : null;
 if (useEmulators) {
+  connectStorageEmulator(storage, EMULATOR_HOST, 9199);
   connectFirestoreEmulator(db, EMULATOR_HOST, 8080);
   connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
 }
@@ -553,6 +556,7 @@ function renderProducts() {
       html += `<div class="p-group"><h3>${escapeHtml(section.id === 'standard' ? section.name : cat.name)}</h3>
         ${list.map((p) => `<div class="p-row${out.has(p.id) ? ' is-out' : ''}${p.hidden ? ' is-hidden' : ''}">
             <label class="sold-toggle"><input type="checkbox" data-id="${p.id}" ${out.has(p.id) ? 'checked' : ''} />Sold out</label>
+            ${p.image ? `<img class="p-thumb" src="${escapeHtml(p.image)}" alt="" loading="lazy" />` : ''}
             <span class="p-name">${p.listNo}. ${escapeHtml(p.name)} <small>${escapeHtml(p.brand ?? '')}</small>
               ${p.custom ? '<small class="tag-edit">added</small>' : p.edited ? '<small class="tag-edit">edited</small>' : ''}
               ${p.hidden ? '<small class="tag-hidden">hidden</small>' : ''}</span>
@@ -570,6 +574,66 @@ function renderProducts() {
 }
 
 let editingId = null; // null = adding a new item
+
+// ── Item photo: compressed in the browser before upload ──
+const PHOTO_W = 320;
+const PHOTO_H = 240;
+const PHOTO_MAX_BYTES = 25 * 1024;
+let photoDraft = { blob: null, remove: false, previewUrl: null };
+
+function canvasBlob(canvas, type, quality) {
+  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+/** Crops to 4:3, scales to 320×240 and encodes WebP (JPEG fallback), lowering quality until it is ≤ 25 KB. */
+async function compressPhoto(file) {
+  const img = await createImageBitmap(file).catch(async () => {
+    const el = new Image();
+    el.src = URL.createObjectURL(file);
+    await el.decode();
+    return el;
+  });
+  const sw = img.width, sh = img.height;
+  const scale = Math.max(PHOTO_W / sw, PHOTO_H / sh);
+  const cw = PHOTO_W / scale, ch = PHOTO_H / scale;
+  const canvas = document.createElement('canvas');
+  canvas.width = PHOTO_W;
+  canvas.height = PHOTO_H;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, PHOTO_W, PHOTO_H);
+  ctx.drawImage(img, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, PHOTO_W, PHOTO_H);
+  let best = null;
+  for (const type of ['image/webp', 'image/jpeg']) {
+    for (const q of [0.62, 0.5, 0.4, 0.3, 0.22]) {
+      const blob = await canvasBlob(canvas, type, q);
+      if (!blob || blob.type !== type) break; // this browser can't encode the type
+      best = blob;
+      if (blob.size <= PHOTO_MAX_BYTES) return blob;
+    }
+    if (best) return best;
+  }
+  throw new Error('This phone could not process the photo.');
+}
+
+function showPhoto(url, info) {
+  const box = $('#item-photo-preview');
+  box.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="" />` : 'No photo';
+  $('#item-photo-remove').hidden = !url;
+  $('#item-photo-pick-label').textContent = url ? 'Change photo' : 'Add photo';
+  $('#item-photo-info').textContent = info;
+}
+
+async function uploadPhoto(id, blob) {
+  const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
+  const r = storageRef(storage, `products/${id}-${Date.now()}.${ext}`);
+  await uploadBytes(r, blob, { contentType: blob.type, cacheControl: 'public, max-age=31536000, immutable' });
+  return getDownloadURL(r);
+}
+
+function deleteOldPhoto(url) {
+  if (url) deleteObject(storageRef(storage, url)).catch(() => {}); // tidy-up only; ignore failures
+}
 
 function showDiscount() {
   const f = $('#item-form');
@@ -603,6 +667,9 @@ function openItemEditor(id) {
   f.finalPrice.value = item?.finalPrice ?? '';
   f.bulkOfferEligible.checked = item ? !!item.bulkOfferEligible : true;
   f.hidden.checked = !!item?.hidden;
+  if (photoDraft.previewUrl) URL.revokeObjectURL(photoDraft.previewUrl);
+  photoDraft = { blob: null, remove: false, previewUrl: null };
+  showPhoto(item?.image ?? null, item?.image ? 'Photo shown on the price list.' : 'Optional. Shrunk to about 10 KB so the price list stays fast.');
   $('#item-reset').hidden = !(id && original && overrides()[id]);
   $('#item-delete').hidden = !(id && item?.custom);
   $('#item-error').hidden = true;
@@ -639,8 +706,26 @@ async function submitItem(e) {
   const fields = { name, brand, pcsPerBox: pcs, amount, finalPrice, bulkOfferEligible: f.bulkOfferEligible.checked };
   const existing = editingId ? overrides()[editingId] : null;
   const original = editingId ? state.base.products.find((p) => p.id === editingId) : null;
-  let id = editingId;
+  const id = editingId ?? `ADD-${newOrderCode().slice(4)}`;
   let value;
+
+  // Photo: upload the new one (if picked), keep the current one, or drop it.
+  const oldImage = existing?.image ?? null;
+  let image = photoDraft.remove ? null : oldImage;
+  if (photoDraft.blob) {
+    const saveBtn = f.querySelector('button[type=submit]');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Uploading photo…';
+    try {
+      image = await uploadPhoto(id, photoDraft.blob);
+    } catch (ex) {
+      return fail(`Photo upload failed: ${ex.message}`);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save';
+    }
+  }
+  if (image) fields.image = image;
 
   if (original) {
     // Store only what differs from the price-list file.
@@ -649,17 +734,17 @@ async function submitItem(e) {
     if (f.hidden.checked) value.hidden = true;
     if (!Object.keys(value).length) {
       await removeCatalogEntry(id).catch((ex) => fail(`Could not save: ${ex.message}`));
-      if (err.hidden) { $('#item-dialog').close(); toast('Item matches the original price list'); }
+      if (err.hidden) { deleteOldPhoto(oldImage); $('#item-dialog').close(); toast('Item matches the original price list'); }
       return;
     }
     Object.assign(value, meta);
   } else {
-    id ??= `ADD-${newOrderCode().slice(4)}`;
     value = { ...fields, custom: true, categoryId: f.categoryId.value, hidden: f.hidden.checked,
       createdAt: existing?.createdAt ?? new Date().toISOString(), ...meta };
   }
   try {
     await saveCatalogEntry(id, value);
+    if (oldImage && oldImage !== image) deleteOldPhoto(oldImage);
     $('#item-dialog').close();
     toast(editingId ? 'Item updated on the website and app' : 'Item added to the price list');
   } catch (ex) {
@@ -687,6 +772,20 @@ function setupProductUi() {
 
   const f = $('#item-form');
   f.addEventListener('submit', submitItem);
+  $('#item-photo-input').addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    $('#item-photo-info').textContent = 'Compressing…';
+    try {
+      const blob = await compressPhoto(file);
+      if (photoDraft.previewUrl) URL.revokeObjectURL(photoDraft.previewUrl);
+      photoDraft = { blob, remove: false, previewUrl: URL.createObjectURL(blob) };
+      showPhoto(photoDraft.previewUrl, `Ready: ${(blob.size / 1024).toFixed(1)} KB (from ${(file.size / 1024).toFixed(0)} KB). Tap Save to upload.`);
+    } catch (ex) {
+      $('#item-photo-info').textContent = ex.message;
+    }
+  });
   f.addEventListener('input', (e) => ['amount', 'finalPrice'].includes(e.target.name) && showDiscount());
   const dlg = $('#item-dialog');
   dlg.addEventListener('click', async (e) => {
@@ -699,6 +798,10 @@ function setupProductUi() {
       if (amount > 0) f.finalPrice.value = round2(amount * (1 - pct / 100));
       else if (fin > 0) f.amount.value = pct ? round2(fin / (1 - pct / 100)) : fin;
       return showDiscount();
+    }
+    if (e.target.closest('[data-act="remove-photo"]')) {
+      photoDraft = { blob: null, remove: true, previewUrl: null };
+      return showPhoto(null, 'Photo will be removed when you tap Save.');
     }
     if (e.target.closest('[data-act="reset"]')) {
       if (!confirm('Undo all changes to this item and use the original price list?')) return;

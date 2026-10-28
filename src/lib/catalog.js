@@ -25,6 +25,13 @@ export async function loadPriceList() {
 
 const round2 = (n) => Math.round(n * 100) / 100;
 const num = (v) => (v === '' || v == null ? null : Number(v));
+// Only photos uploaded to this project's Firebase Storage are shown.
+// (Local testing also allows the Storage emulator's links.)
+const photo = (url) =>
+  typeof url === 'string' &&
+  (url.startsWith('https://firebasestorage.googleapis.com/') || (import.meta.env?.DEV && /^http:\/\/[^/]+:9199\//.test(url)))
+    ? url
+    : null;
 
 function withPrices(p) {
   const finalPrice = round2(Number(p.finalPrice));
@@ -35,7 +42,7 @@ function withPrices(p) {
 
 /**
  * Applies the shop's edits from the admin page (settings/public.catalog) on top of the price-list file.
- * overrides = { [productId]: { name?, brand?, pcsPerBox?, amount?, finalPrice?, bulkOfferEligible?, hidden?,
+ * overrides = { [productId]: { name?, brand?, pcsPerBox?, amount?, finalPrice?, bulkOfferEligible?, hidden?, image?,
  *                              custom?: true, categoryId?, createdAt? } }
  * Edited items keep their place; hidden items disappear; custom (shop-added) items go at the end of their category.
  */
@@ -57,6 +64,7 @@ export function applyCatalogOverrides(data, overrides = {}) {
       ...(o.amount != null ? { amount: o.amount } : {}),
       ...(o.finalPrice != null ? { finalPrice: o.finalPrice } : {}),
       ...('bulkOfferEligible' in o ? { bulkOfferEligible: !!o.bulkOfferEligible } : {}),
+      ...(photo(o.image) ? { image: photo(o.image) } : {}),
       edited: true,
     }));
   }
@@ -71,7 +79,7 @@ export function applyCatalogOverrides(data, overrides = {}) {
       id, sku: id, listNo: lastNo + 1, section: cat.section, categoryId: cat.id, category: cat.name,
       name: o.name, brand: o.brand || null, box: 1, pcsPerBox: num(o.pcsPerBox),
       amount: o.amount, finalPrice: o.finalPrice, bulkOfferEligible: o.bulkOfferEligible !== false,
-      currency: 'INR', active: true, custom: true,
+      currency: 'INR', active: true, custom: true, ...(photo(o.image) ? { image: photo(o.image) } : {}),
     }));
   }
   return { ...data, products };

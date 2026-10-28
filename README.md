@@ -215,6 +215,7 @@ With the admin page open, new orders always ring and show an alert. To get notif
 ## Day-to-day
 
 - **Change prices, rename, hide or add items:** admin page → **Items & prices** → **Edit** / **+ Add item**. The website and app update straight away, with no code change or deploy needed. Edits are stored in Firestore (`settings/public.catalog`) on top of the price-list file. **↺ Back to original price list** undoes an item's edits.
+- **Item photos (optional):** Items & prices → Edit → **Add photo**. The photo is cropped and compressed on the phone to about 5–25 KB (320×240 WebP) before upload, loads only when scrolled into view, and is cached for a year. Items without a photo show a compact text card. One-time setup: Firebase console → **Storage → Get started** (location asia-south1), then `npm run deploy:rules`.
 - **Start next season's list:** edit `data/best_fire_works_price_list_2026.csv` (Excel is fine; keep the header row and `id` column) and push. `npm run prices` checks that amount − discount = final price. Clear the old admin edits afterwards (each item's **↺ Back to original price list**, or delete the `catalog` field in Firestore).
 - **Store details, offer dates or excluded items:** edit `data/store.json`.
 - **Sold out, pause bookings, notice banner:** use the admin page, no code change needed.
