@@ -6,7 +6,7 @@ Website and Android app for **Best FireWorks** (Sivakasi Factory Outlet, Bachupa
 |---|---|
 | `/` | Price list (Standard / Other Brands), search, cart, 10% bulk offer, booking form |
 | `/track?code=BFW-XXXXXX` | Order status for the customer (no login, no personal details shown) |
-| `/admin` | Shop login: live orders with sound and notification alerts, status updates with WhatsApp messages, sold-out items, pause bookings, CSV export |
+| `/admin` | Shop login: live orders with sound and notification alerts, status updates with WhatsApp messages, 📊 sales dashboard, item and price editor, sold-out items, home-delivery switch, pause bookings, CSV export |
 
 **Built with:** plain HTML/CSS/JS with Vite, Firebase (Firestore, Auth, Hosting, optional Cloud Function for push), and Capacitor for the Android APK. GitHub Actions deploys the website and builds the APK.
 
@@ -112,7 +112,9 @@ With the admin page open, new orders always ring and show an alert. To get notif
 - **Start next season's list:** edit `data/best_fire_works_price_list_2026.csv` (Excel is fine; keep the header row and `id` column) and push. `npm run prices` checks that amount − discount = final price. Clear the old admin edits afterwards (each item's **↺ Back to original price list**, or delete the `catalog` field in Firestore).
 - **Store details, offer dates or excluded items:** edit `data/store.json`.
 - **Sold out, pause bookings, notice banner:** use the admin page, no code change needed.
-- **Delivery option:** set `deliveryEnabled: true` in `src/config.js`.
+- **Home delivery:** admin → **Settings** → "Offer home delivery" (and an optional note such as area or charges). Pickup at the stall is always available. The security rules refuse delivery orders while it is off.
+- **Sales:** admin → **📊 Sales**. Revenue, still-to-collect, sales by category, best-selling items, daily sales, busiest hours, pickup/delivery and website/app split, for today, yesterday, the last 7 days or the whole season. **⬇ All item sales (CSV)** helps with restocking.
+- Customers can book for any day from today.
 
 ## How orders flow
 1. The customer books and gets two codes:

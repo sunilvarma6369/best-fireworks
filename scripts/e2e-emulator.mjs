@@ -89,7 +89,21 @@ try {
 check(blocked, 'booking is refused while orders are paused');
 await setDoc(doc(shop, 'settings', 'public'), { ordersOpen: true, soldOut: [] }, { merge: true });
 
-// 6. Shop edits prices / adds / hides items from the admin page -> customers see it on next load
+// 6. Home delivery only while the shop has switched it on
+const deliveryOrder = () => placeOrder({
+  customer: { name: 'Delivery Customer', phone: '9876543212' }, fulfilment: 'delivery',
+  address: 'Flat 101, Test Residency, Bachupally', totals, priceListDate: data.generatedOn,
+});
+await setDoc(doc(shop, 'settings', 'public'), { deliveryEnabled: false }, { merge: true });
+let deliveryBlocked = false;
+try { await deliveryOrder(); } catch { deliveryBlocked = true; }
+check(deliveryBlocked, 'delivery order refused while home delivery is off');
+await setDoc(doc(shop, 'settings', 'public'), { deliveryEnabled: true }, { merge: true });
+const del = await deliveryOrder();
+check(/^BFW-/.test(del.code) && (await fetchTracking(del.code))?.fulfilment === 'delivery', `delivery order accepted once switched on (${del.code})`);
+await setDoc(doc(shop, 'settings', 'public'), { deliveryEnabled: false }, { merge: true });
+
+// 7. Shop edits prices / adds / hides items from the admin page -> customers see it on next load
 await setDoc(doc(shop, 'settings', 'public'), {
   catalog: {
     'OTH-001': { finalPrice: 35, amount: 45 },

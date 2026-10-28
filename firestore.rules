@@ -25,6 +25,12 @@ service cloud.firestore {
         || get(/databases/$(database)/documents/settings/public).data.get('ordersOpen', true) != false;
     }
 
+    // Pickup is always allowed; home delivery only while the shop has it switched on in the admin page.
+    function deliveryOn() {
+      return exists(/databases/$(database)/documents/settings/public)
+        && get(/databases/$(database)/documents/settings/public).data.get('deliveryEnabled', false) == true;
+    }
+
     function optionalString(d, key, max) {
       return !(key in d) || (d[key] is string && d[key].size() <= max);
     }
@@ -43,7 +49,7 @@ service cloud.firestore {
         && d.customer.name is string && d.customer.name.size() >= 2 && d.customer.name.size() <= 80
         && d.customer.phone is string && d.customer.phone.matches('^[6-9][0-9]{9}$')
         && optionalString(d.customer, 'area', 80)
-        && d.fulfilment in ['pickup', 'delivery']
+        && (d.fulfilment == 'pickup' || (d.fulfilment == 'delivery' && deliveryOn()))
         && optionalString(d, 'address', 300)
         && optionalString(d, 'pickupDate', 10)
         && optionalString(d, 'note', 500)

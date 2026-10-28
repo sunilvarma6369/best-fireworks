@@ -663,3 +663,252 @@ code {
     text-align: right;
   }
 }
+
+/* ── Sales dashboard ─────────────────────────────────── */
+.dash-filters {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+}
+.dash-empty {
+  padding: 2rem 0;
+  text-align: center;
+}
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+@media (min-width: 760px) {
+  .kpis {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.kpi {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.kpi small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.kpi strong {
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 5.5vw, 1.7rem);
+  line-height: 1.15;
+}
+.kpi span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+.dash-note {
+  margin: 0.5rem 0 0.25rem;
+}
+.dash-card {
+  margin-top: 0.75rem;
+  padding: 0.9rem;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.dash-card h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1.1rem;
+}
+.dash-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+.dash-head h3 {
+  margin: 0;
+}
+.dash-grid {
+  display: grid;
+  gap: 0;
+}
+@media (min-width: 820px) {
+  .dash-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+}
+
+/* Horizontal bars: label, track, value. One series = one colour (brand). */
+.hbars {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+}
+.hbar {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'label val' 'track track';
+  gap: 0.2rem 0.6rem;
+  font-size: 0.88rem;
+  outline-offset: 3px;
+}
+.hbar-label {
+  grid-area: label;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hbar-val {
+  grid-area: val;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.hbar-track {
+  grid-area: track;
+  height: 10px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+.hbar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--brand);
+}
+.hbar:hover .hbar-fill,
+.hbar:focus-visible .hbar-fill {
+  filter: brightness(1.15);
+}
+
+/* Vertical bars (daily sales, hours) */
+.vbars {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 150px;
+  padding-top: 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.vcol {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.vbar-wrap {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+}
+.vbar {
+  display: block;
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: var(--brand);
+}
+.vcol:hover .vbar,
+.vcol:focus-visible .vbar {
+  filter: brightness(1.15);
+}
+.vlabel {
+  height: 1.1rem;
+  margin-bottom: -1.35rem;
+  color: var(--muted);
+  font-size: 0.66rem;
+  white-space: nowrap;
+}
+.vbars + .fine {
+  margin-top: 1.6rem;
+}
+.vbars:last-child {
+  margin-bottom: 1.4rem;
+}
+
+/* Tooltip for bars (hover or keyboard focus / tap) */
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 220px;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: normal;
+  pointer-events: none;
+}
+.hbar[data-tip]:hover::after,
+.hbar[data-tip]:focus-visible::after {
+  left: 0;
+  transform: none;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.5rem;
+}
+.status-grid div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.dash-splits {
+  display: grid;
+  gap: 1rem;
+}
+@media (min-width: 820px) {
+  .dash-splits {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.split h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+}
+.split-row {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+  font-size: 0.88rem;
+}
+.split-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+.split-track span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--brand);
+}
+.split-row strong small {
+  color: var(--muted);
+  font-weight: 600;
+}

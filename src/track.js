@@ -1,7 +1,7 @@
 import { escapeHtml, extTarget, loadPriceList, telLink, waLink } from './lib/catalog.js';
 import { cleanCodeInput, normalizeOrderCode } from './lib/codes.js';
 import { formatDate, formatDateTime, formatRupees } from './lib/money.js';
-import { fetchTracking, getMyOrder, STATUS, STATUS_FLOW } from './lib/orders.js';
+import { customerStatus, fetchTracking, getMyOrder, STATUS_FLOW } from './lib/orders.js';
 
 const $ = (sel) => document.querySelector(sel);
 const REFRESH_MS = 30_000;
@@ -10,14 +10,14 @@ let store = null;
 let currentCode = null;
 let refreshTimer;
 
-function timelineHtml(status) {
+function timelineHtml(status, fulfilment) {
   if (status === 'cancelled') {
     return `<ol class="timeline"><li class="done">Received</li><li class="current">Cancelled</li></ol>`;
   }
   const idx = STATUS_FLOW.indexOf(status);
   return `<ol class="timeline">${STATUS_FLOW.map((s, i) => {
     const cls = i < idx ? 'done' : i === idx ? 'done current' : '';
-    return `<li class="${cls}">${STATUS[s].label}</li>`;
+    return `<li class="${cls}">${customerStatus(s, fulfilment).label}</li>`;
   }).join('')}</ol>`;
 }
 
@@ -40,7 +40,7 @@ function savedOrderHtml(mine) {
       <div class="saved-totals">
         <div><span>Subtotal</span><span>${formatRupees(t.cartTotal ?? 0)}</span></div>
         ${t.bulkDiscount ? `<div class="save"><span>Bulk offer</span><span>−${formatRupees(t.bulkDiscount)}</span></div>` : ''}
-        <div class="net"><span>To pay at stall</span><span>${formatRupees(t.netPayable ?? 0)}</span></div>
+        <div class="net"><span>${mine.fulfilment === 'delivery' ? 'To pay on delivery' : 'To pay at stall'}</span><span>${formatRupees(t.netPayable ?? 0)}</span></div>
       </div>
       ${mine.note ? `<p class="fine">Note: ${escapeHtml(mine.note)}</p>` : ''}
     </div>`;
@@ -57,16 +57,16 @@ function render(code, t) {
       + savedOrderHtml(mine);
     return;
   }
-  const s = STATUS[t.status] ?? { label: t.status, help: '' };
+  const s = customerStatus(t.status, t.fulfilment);
   const updated = t.updatedAt?.toDate?.();
   const wa = store ? waLink(store.whatsapp, `Hi Best FireWorks, I am asking about my order ${code}.`) : null;
   el.innerHTML = `<div class="card track-result">
       <div class="track-head"><h1>${escapeHtml(code)}</h1><span class="badge status-${escapeHtml(t.status)}">${escapeHtml(s.label)}</span></div>
       <p class="track-help">${escapeHtml(s.help)}</p>
       ${t.message ? `<p class="shop-msg"><strong>Message from the shop:</strong><br />${escapeHtml(t.message)}</p>` : ''}
-      ${timelineHtml(t.status)}
+      ${timelineHtml(t.status, t.fulfilment)}
       <div class="track-facts">
-        <div><small>To pay at stall</small><strong>${formatRupees(t.netPayable)}</strong></div>
+        <div><small>${t.fulfilment === 'delivery' ? 'To pay on delivery' : 'To pay at stall'}</small><strong>${formatRupees(t.netPayable)}</strong></div>
         <div><small>Boxes</small><strong>${t.itemCount}</strong></div>
         ${t.pickupDate ? `<div><small>Preferred date</small><strong>${formatDate(t.pickupDate)}</strong></div>` : ''}
         <div><small>Last update</small><strong>${updated ? formatDateTime(updated) : '—'}</strong></div>

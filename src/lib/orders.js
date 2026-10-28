@@ -5,7 +5,7 @@ import { isNativeApp } from './catalog.js';
 import { newOrderCode, newPickupCode } from './codes.js';
 import { toRupees } from './money.js';
 
-export { STATUS, STATUS_FLOW } from './status.js';
+export { customerStatus, STATUS, STATUS_FLOW } from './status.js';
 
 const db = app ? getFirestore(app) : null;
 if (db && useEmulators) connectFirestoreEmulator(db, EMULATOR_HOST, 8080);

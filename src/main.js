@@ -6,7 +6,7 @@ import {
 import { cleanCodeInput, normalizeOrderCode } from './lib/codes.js';
 import { formatDate, formatPaise, formatRupees, todayIST } from './lib/money.js';
 import { computeTotals } from './lib/pricing.js';
-import { fetchPublicSettings, fetchTracking, getMyOrders, placeOrder, rememberOrder, STATUS } from './lib/orders.js';
+import { customerStatus, fetchPublicSettings, fetchTracking, getMyOrders, placeOrder, rememberOrder } from './lib/orders.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const CART_KEY = 'bfw.cart.v1';
@@ -125,11 +125,15 @@ function renderStoreInfo() {
 }
 
 function renderSettings() {
-  const { notice, ordersOpen } = state.settings;
+  const { notice, ordersOpen, deliveryEnabled, deliveryNote } = state.settings;
   const n = $('#notice');
   n.textContent = notice ?? '';
   n.hidden = !notice;
   $('#closed-banner').hidden = ordersOpen !== false;
+  // Home delivery is switched on/off by the shop (admin → Settings); pickup is always available.
+  $('#delivery-option').hidden = !deliveryEnabled;
+  $('#delivery-note').textContent = deliveryEnabled ? (deliveryNote || 'Delivery charges confirmed on call') : '';
+  $('#hero-collect').textContent = deliveryEnabled ? 'pick up or get it delivered.' : 'pick up at our stall.';
 }
 
 // ── Catalog ──────────────────────────────────────────────
@@ -341,13 +345,14 @@ function setupCheckout() {
   form.phone.value = saved.phone ?? '';
   form.area.value = saved.area ?? '';
 
-  const opening = state.data.store.openingDate;
-  const today = todayIST();
-  form.pickupDate.min = opening > today ? opening : today;
+  // Customers can book for any day from today.
+  form.pickupDate.min = todayIST();
 
-  if (ORDER_OPTIONS.deliveryEnabled) $('#delivery-option').hidden = false;
   form.addEventListener('change', (e) => {
-    if (e.target.name === 'fulfilment') $('#address-field').hidden = form.fulfilment.value !== 'delivery';
+    if (e.target.name !== 'fulfilment') return;
+    const delivery = form.fulfilment.value === 'delivery';
+    $('#address-field').hidden = !delivery;
+    $('#date-label').textContent = delivery ? 'Preferred delivery date' : 'Preferred pickup date';
   });
   form.phone.addEventListener('input', () => {
     form.phone.value = form.phone.value.replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '').slice(0, 10);
@@ -366,7 +371,7 @@ function setupCheckout() {
     const name = form.name.value.trim().replace(/\s+/g, ' ');
     const phone = form.phone.value.trim();
     const area = form.area.value.trim();
-    const fulfilment = form.fulfilment.value || 'pickup';
+    const fulfilment = state.settings.deliveryEnabled && form.fulfilment.value === 'delivery' ? 'delivery' : 'pickup';
     const address = form.address.value.trim();
     const pickupDate = form.pickupDate.value;
     const note = form.note.value.trim();
@@ -374,7 +379,7 @@ function setupCheckout() {
     if (name.length < 2) return fail('Please enter your name.', form.name);
     if (!/^[6-9]\d{9}$/.test(phone)) return fail('Please enter a valid 10-digit mobile number.', form.phone);
     if (fulfilment === 'delivery' && address.length < 8) return fail('Please enter your delivery address.', form.address);
-    if (pickupDate && pickupDate < form.pickupDate.min) return fail('Please choose a pickup date from the opening day onwards.', form.pickupDate);
+    if (pickupDate && pickupDate < todayIST()) return fail('Please choose today or a later date.', form.pickupDate);
 
     const t = totals();
     if (!t.lines.length) return fail('Your cart is empty.');
@@ -426,7 +431,7 @@ function whatsappMessage(result, { customer, fulfilment, address, pickupDate, no
   // null = optional line that is left out; '' = intentional blank line
   return [
     `Hi Best FireWorks, I booked order *${result.code}*.`,
-    `Pickup code: *${result.pickupCode}*`,
+    `${fulfilment === 'delivery' ? 'Delivery' : 'Pickup'} code: *${result.pickupCode}*`,
     `Name: ${customer.name}`,
     `Mobile: ${customer.phone}`,
     customer.area ? `Area: ${customer.area}` : null,
@@ -447,14 +452,16 @@ function whatsappMessage(result, { customer, fulfilment, address, pickupDate, no
 function showDone(result, details) {
   const { store } = state.data;
   const waUrl = waLink(store.whatsapp, whatsappMessage(result, details));
+  const delivery = details.fulfilment === 'delivery';
   $('#done-body').innerHTML = `
     <div class="codes">
       <div class="done-code"><small>Order code</small><strong>${result.code}</strong><small>To track your order</small></div>
-      <div class="done-code pin"><small>Pickup code</small><strong>${result.pickupCode}</strong><small>Tell the shop when you collect. Don't share it.</small></div>
+      <div class="done-code pin"><small>${delivery ? 'Delivery code' : 'Pickup code'}</small><strong>${result.pickupCode}</strong>
+        <small>${delivery ? 'Tell the delivery person' : 'Tell the shop when you collect'}. Don't share it.</small></div>
     </div>
     <p>Thank you, ${escapeHtml(details.customer.name)}. <strong>Send your order to the shop on WhatsApp</strong> to confirm it.
        The shop will keep you posted on WhatsApp at <strong>${escapeHtml(details.customer.phone)}</strong>.
-       Pay <strong>${formatRupees(result.totals.netPayable)}</strong> at the stall when you collect.</p>
+       Pay <strong>${formatRupees(result.totals.netPayable)}</strong> ${delivery ? 'when your order is delivered' : 'at the stall when you collect'}.</p>
     <div class="done-actions">
       <a class="btn btn-wa btn-block" href="${waUrl}" ${extTarget}>💬 Send order to shop on WhatsApp</a>
       <a class="btn btn-primary btn-block" href="track.html?code=${result.code}">📦 Track this order</a>
@@ -490,7 +497,7 @@ async function renderMyOrders() {
         const t = await fetchTracking(o.code);
         const status = t?.status ?? 'new';
         badge.className = `badge status-${status}`;
-        badge.textContent = STATUS[status]?.label ?? status;
+        badge.textContent = customerStatus(status, o.fulfilment).label;
       } catch {
         badge.textContent = 'Tap to view';
       }

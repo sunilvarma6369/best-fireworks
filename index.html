@@ -39,7 +39,7 @@
     <section class="hero">
       <div class="hero-text">
         <p class="eyebrow">Diwali 2026 · <span id="years">4</span> years serving Bachupally</p>
-        <h1>Book your crackers online,<br />pick up at our stall.</h1>
+        <h1>Book your crackers online,<br /><span id="hero-collect">pick up at our stall.</span></h1>
         <p class="hero-sub">Grand opening <strong id="opening">5 November 2026</strong>. Pay at the stall by cash, UPI or card. No advance needed.</p>
         <div class="hero-cta">
           <a class="btn btn-primary" href="#catalog">See price list</a>
@@ -125,14 +125,15 @@
             <input name="area" maxlength="80" placeholder="e.g. Bachupally, Nizampet" />
           </label>
           <fieldset class="fulfil" id="fulfil-group">
-            <legend>How will you collect?</legend>
-            <label class="radio"><input type="radio" name="fulfilment" value="pickup" checked /> Pickup at stall</label>
-            <label class="radio" id="delivery-option" hidden><input type="radio" name="fulfilment" value="delivery" /> Home delivery (charges confirmed on call)</label>
+            <legend>Pickup or delivery?</legend>
+            <label class="radio"><input type="radio" name="fulfilment" value="pickup" checked /> 🏪 Pickup at stall</label>
+            <label class="radio" id="delivery-option" hidden><input type="radio" name="fulfilment" value="delivery" />
+              <span>🚚 Home delivery<small class="delivery-note" id="delivery-note"></small></span></label>
           </fieldset>
           <label id="address-field" hidden>Delivery address
-            <textarea name="address" maxlength="300" rows="2" placeholder="House no, street, landmark"></textarea>
+            <textarea name="address" maxlength="300" rows="2" placeholder="House no, street, landmark, area"></textarea>
           </label>
-          <label>Preferred pickup date <small>(optional)</small>
+          <label><span id="date-label">Preferred pickup date</span> <small>(optional, from today)</small>
             <input name="pickupDate" type="date" />
           </label>
           <label>Note for the shop <small>(optional)</small>
@@ -140,7 +141,7 @@
           </label>
           <p class="form-error" id="form-error" role="alert" hidden></p>
           <button class="btn btn-primary btn-block" id="submit-order" type="submit">Book order</button>
-          <p class="fine">No payment now. The shop will call you to confirm. Pay at the stall when you collect.</p>
+          <p class="fine">No payment now. The shop will confirm on WhatsApp or call. Pay when you collect, or on delivery.</p>
         </form>
       </div>
     </dialog>

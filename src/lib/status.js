@@ -8,3 +8,12 @@ export const STATUS = {
 };
 
 export const STATUS_FLOW = ['new', 'confirmed', 'ready', 'completed'];
+
+/** Customer-facing wording, adjusted for home-delivery orders. */
+export function customerStatus(status, fulfilment) {
+  const s = STATUS[status] ?? { label: status, help: '' };
+  if (fulfilment !== 'delivery') return s;
+  if (status === 'ready') return { ...s, label: 'Out for delivery', help: 'Your order is on its way. Pay when it arrives (cash, UPI or card).' };
+  if (status === 'completed') return { ...s, label: 'Delivered', help: 'Delivered. Happy Diwali!' };
+  return s;
+}

@@ -25,9 +25,8 @@ export const SITE_URL = 'https://bestfireworks.web.app';
 // website (see firebase.json: /app redirects here). Leave as '' to hide the link.
 export const APK_URL = '/download/BestFireWorks.apk';
 
+// Pickup at the stall is always offered. Home delivery is switched on/off by the shop in admin → Settings.
 export const ORDER_OPTIONS = {
-  // Pickup at the stall is always offered. Turn this on only if the shop delivers.
-  deliveryEnabled: false,
   maxQtyPerItem: 500,
 };
 

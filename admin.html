@@ -72,6 +72,7 @@
 
       <nav class="a-tabs" role="tablist">
         <button class="a-tab" role="tab" data-tab="orders" aria-selected="true">Orders <span class="count" id="new-count" hidden></span></button>
+        <button class="a-tab" role="tab" data-tab="dashboard" aria-selected="false">📊 Sales</button>
         <button class="a-tab" role="tab" data-tab="products" aria-selected="false">Items &amp; prices</button>
         <button class="a-tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
       </nav>
@@ -92,6 +93,14 @@
         <div id="order-list" class="order-list"><p class="muted">Loading orders…</p></div>
       </div>
 
+      <div class="a-panel" id="tab-dashboard" hidden>
+        <div class="dash-filters">
+          <div class="status-chips" id="dash-range" role="group" aria-label="Time range"></div>
+          <div class="status-chips" id="dash-basis" role="group" aria-label="Which orders to count"></div>
+        </div>
+        <div id="dashboard"></div>
+      </div>
+
       <div class="a-panel" id="tab-products" hidden>
         <p class="muted">Tap <strong>Edit</strong> to change an item's name or price, or to hide it. Tick <strong>Sold out</strong> to stop orders for it until you untick it. Changes show on the website and app straight away.</p>
         <div class="a-toolbar-row">
@@ -105,6 +114,10 @@
         <form id="settings-form" class="a-card a-form">
           <h2>Online booking</h2>
           <label class="switch"><input type="checkbox" name="ordersOpen" /> Accept online orders</label>
+          <label class="switch"><input type="checkbox" name="deliveryEnabled" /> Offer home delivery <small>(pickup at the stall is always available)</small></label>
+          <label>Delivery note for customers <small>(shown under the delivery option)</small>
+            <input name="deliveryNote" maxlength="120" placeholder="e.g. Within 5 km of Bachupally · ₹100 delivery charge" />
+          </label>
           <label>Notice banner on website <small>(leave empty to hide)</small>
             <input name="notice" maxlength="200" placeholder="e.g. Stall open 9 am – 11 pm. Call for bulk orders." />
           </label>

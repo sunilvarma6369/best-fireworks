@@ -14,7 +14,9 @@ import { cleanCodeInput, newOrderCode, normalizeOrderCode } from './lib/codes.js
 import { app, EMULATOR_HOST, useEmulators } from './lib/firebase-app.js';
 import { formatDate, formatDateTime, formatPaise, formatRupees, toPaise } from './lib/money.js';
 import { computeTotals } from './lib/pricing.js';
+import { computeSales, BASES, RANGES } from './lib/sales.js';
 import { STATUS } from './lib/status.js';
+import { itemSalesCsv, renderChips, renderDashboard } from './dashboard.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const db = app ? getFirestore(app) : null;
@@ -24,6 +26,8 @@ if (useEmulators) {
   connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
 }
 
+// Orders the admin page keeps live (newest first). Also the data the Sales dashboard is computed from.
+const ORDER_LIMIT = 1500;
 const PREFS_KEY = 'bfw.admin.prefs.v1';
 const prefs = { sound: true, repeat: true, wake: false, ...readJson(PREFS_KEY) };
 
@@ -36,6 +40,7 @@ const state = {
   filter: 'active',
   search: '',
   productSearch: '',
+  dash: { range: 'all', basis: 'booked', itemSort: 'boxes' },
   firstSnapshot: true,
   openCode: null,
   fresh: new Set(),
@@ -144,7 +149,7 @@ async function startApp() {
 
   unsubs.push(
     onSnapshot(
-      query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(500)),
+      query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(ORDER_LIMIT)),
       (snap) => {
         const added = [];
         for (const ch of snap.docChanges()) {
@@ -154,6 +159,7 @@ async function startApp() {
         }
         state.firstSnapshot = false;
         renderOrders();
+        renderDash();
         if (added.length) announce(added);
         if (state.openCode && $('#order-dialog').open) renderDetail(state.openCode);
         if (state.deepLinkCode && state.orders.has(state.deepLinkCode)) {
@@ -176,6 +182,7 @@ async function startApp() {
       rebuildCatalog();
       fillSettingsForm();
       renderProducts();
+      renderDash();
     }),
   );
 
@@ -294,7 +301,7 @@ function renderDetail(code) {
     .join('');
   const actions = [
     ['confirmed', '✅ Confirm'],
-    ['ready', '📦 Ready for pickup'],
+    ['ready', o.fulfilment === 'delivery' ? '🚚 Out for delivery' : '📦 Ready for pickup'],
     ['completed', '🎉 Completed'],
     ['cancelled', '✖ Cancel'],
   ];
@@ -354,7 +361,9 @@ function customerMessage(o, status, extra) {
   const store = state.catalog?.store;
   const lines = {
     confirmed: `Hi ${name}, your Best FireWorks order *${o.code}* is confirmed ✅\nAmount to pay at the stall: *${pay}* (Cash / UPI / Card).\nWe will message you when it is packed and ready.`,
-    ready: `Hi ${name}, your order *${o.code}* is packed and ready for pickup 🎆\nAmount to pay: *${pay}* (Cash / UPI / Card).\nPlease bring your 4-digit pickup code.${store ? `\nStall: ${store.address.display}\nDirections: ${store.directionsUrl}` : ''}`,
+    ready: o.fulfilment === 'delivery'
+      ? `Hi ${name}, your order *${o.code}* is out for delivery 🚚\nAmount to pay on delivery: *${pay}* (Cash / UPI / Card).\nPlease tell the delivery person your 4-digit code.`
+      : `Hi ${name}, your order *${o.code}* is packed and ready for pickup 🎆\nAmount to pay: *${pay}* (Cash / UPI / Card).\nPlease bring your 4-digit pickup code.${store ? `\nStall: ${store.address.display}\nDirections: ${store.directionsUrl}` : ''}`,
     completed: `Thank you ${name} for shopping with Best FireWorks! Wishing you and your family a very Happy Diwali 🪔`,
     cancelled: `Hi ${name}, your order *${o.code}* has been cancelled.${store ? ` Please call us on ${prettyPhone(store.phones[0])} if you have any questions.` : ''}`,
   };
@@ -439,7 +448,7 @@ function setupOrderUi() {
     const code = normalizeOrderCode(qc.value);
     if (!code) return false;
     if (!state.orders.has(code)) {
-      qMsg.textContent = `No order ${code} in the last 500 orders.`;
+      qMsg.textContent = `No order ${code} in the last ${ORDER_LIMIT} orders.`;
       return false;
     }
     qMsg.textContent = '';
@@ -702,12 +711,52 @@ function setupProductUi() {
   });
 }
 
+// ── Sales dashboard ──────────────────────────────────────
+function categoryOf(item) {
+  const cats = state.base?.categories ?? [];
+  const p = state.catalog?.productsById.get(item.id) ?? state.base?.products.find((x) => x.id === item.id);
+  const catId = p?.categoryId ?? overrides()[item.id]?.categoryId;
+  const cat = cats.find((c) => c.id === catId);
+  return cat ? { id: cat.id, name: cat.name, section: cat.section } : { id: 'other', name: 'Other', section: 'others' };
+}
+
+function renderDash() {
+  if ($('#tab-dashboard').hidden) return; // only compute while the Sales tab is open
+  const { range, basis, itemSort } = state.dash;
+  renderChips($('#dash-range'), RANGES, range, 'range');
+  renderChips($('#dash-basis'), BASES, basis, 'basis');
+  const stats = computeSales([...state.orders.values()], { range, basis, categoryOf, today: istDate(new Date()) });
+  state.dashStats = stats;
+  renderDashboard($('#dashboard'), stats, { range, basis, itemSort });
+}
+
+function setupDashboardUi() {
+  $('#tab-dashboard').addEventListener('click', (e) => {
+    const r = e.target.closest('[data-range]');
+    const b = e.target.closest('[data-basis]');
+    const so = e.target.closest('[data-sort]');
+    if (r) state.dash.range = r.dataset.range;
+    if (b) state.dash.basis = b.dataset.basis;
+    if (so) state.dash.itemSort = so.dataset.sort;
+    if (r || b || so) return renderDash();
+    if (e.target.closest('#item-csv') && state.dashStats) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(['﻿' + itemSalesCsv(state.dashStats.items)], { type: 'text/csv;charset=utf-8' }));
+      a.download = `best-fireworks-item-sales-${state.dash.range}-${istDate(new Date())}.csv`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }
+  });
+}
+
 // ── Settings ─────────────────────────────────────────────
 function fillSettingsForm() {
   const f = $('#settings-form');
   if (f.contains(document.activeElement)) return;
   f.ordersOpen.checked = state.settings.ordersOpen !== false;
   f.notice.value = state.settings.notice ?? '';
+  f.deliveryEnabled.checked = !!state.settings.deliveryEnabled;
+  f.deliveryNote.value = state.settings.deliveryNote ?? '';
 }
 
 function setupSettingsUi() {
@@ -717,6 +766,8 @@ function setupSettingsUi() {
     setDoc(doc(db, 'settings', 'public'), {
       ordersOpen: f.ordersOpen.checked,
       notice: f.notice.value.trim(),
+      deliveryEnabled: f.deliveryEnabled.checked,
+      deliveryNote: f.deliveryNote.value.trim(),
       updatedAt: serverTimestamp(),
     }, { merge: true })
       .then(() => toast('Settings saved'))
@@ -894,7 +945,8 @@ function setupAlerts() {
 document.querySelectorAll('.a-tab').forEach((tab) =>
   tab.addEventListener('click', () => {
     document.querySelectorAll('.a-tab').forEach((t) => t.setAttribute('aria-selected', String(t === tab)));
-    for (const id of ['orders', 'products', 'settings']) $(`#tab-${id}`).hidden = id !== tab.dataset.tab;
+    for (const id of ['orders', 'dashboard', 'products', 'settings']) $(`#tab-${id}`).hidden = id !== tab.dataset.tab;
+    if (tab.dataset.tab === 'dashboard') renderDash();
   }),
 );
 
@@ -903,6 +955,7 @@ if (!app) {
 } else {
   setupOrderUi();
   setupProductUi();
+  setupDashboardUi();
   setupSettingsUi();
   setupAuth();
 }
