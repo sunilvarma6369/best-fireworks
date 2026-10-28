@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Track Order – Best FireWorks</title>
+    <meta name="theme-color" content="#5b0b16" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/styles/base.css" />
+    <link rel="stylesheet" href="/src/styles/shop.css" />
+    <link rel="stylesheet" href="/src/styles/track.css" />
+  </head>
+  <body class="track-page">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Best FireWorks home">
+        <img src="/icons/favicon.svg" alt="" width="40" height="40" />
+        <span><strong>Best FireWorks</strong><small>Order tracking</small></span>
+      </a>
+      <nav class="top-actions">
+        <a class="icon-btn" href="/">🎆<span>Price list</span></a>
+      </nav>
+    </header>
+
+    <main class="track-wrap">
+      <form class="track-form card" id="track-form">
+        <label>Order code
+          <span class="row">
+            <span class="code-input"><span>BFW-</span><input name="code" placeholder="K7Q2M" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="9" data-code-input /></span>
+            <button class="btn btn-primary" type="submit">Track</button>
+          </span>
+        </label>
+      </form>
+      <section id="result" aria-live="polite"></section>
+    </main>
+
+    <script type="module" src="/src/track.js"></script>
+  </body>
+</html>

@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Best FireWorks – Diwali 2026 Price List & Order Booking</title>
+    <meta name="description" content="Best FireWorks, Sivakasi Factory Outlet in Bachupally, Hyderabad. Book your Diwali crackers online and pick up at the stall. Wholesale & retail." />
+    <meta name="theme-color" content="#5b0b16" />
+    <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/styles/base.css" />
+    <link rel="stylesheet" href="/src/styles/shop.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Best FireWorks home">
+        <img src="/icons/favicon.svg" alt="" width="40" height="40" />
+        <span class="brand-text">
+          <strong>Best FireWorks</strong>
+          <small id="tagline">Sivakasi Factory Outlet</small>
+        </span>
+      </a>
+      <nav class="top-actions">
+        <a id="top-call" class="icon-btn" aria-label="Call the shop"><i aria-hidden="true">📞</i><span>Call</span></a>
+        <a id="top-wa" class="icon-btn" aria-label="WhatsApp the shop"><i aria-hidden="true">💬</i><span>WhatsApp</span></a>
+        <button id="top-orders" class="icon-btn" type="button" aria-label="My orders"><i aria-hidden="true">📦</i><span>Orders</span></button>
+      </nav>
+    </header>
+
+    <div id="notice" class="notice" hidden></div>
+    <div id="closed-banner" class="notice notice-warn" hidden>
+      Online booking is paused right now. You can still browse prices, and call or WhatsApp us to order.
+    </div>
+
+    <section class="hero">
+      <div class="hero-text">
+        <p class="eyebrow">Diwali 2026 · <span id="years">4</span> years serving Bachupally</p>
+        <h1>Book your crackers online,<br />pick up at our stall.</h1>
+        <p class="hero-sub">Grand opening <strong id="opening">5 November 2026</strong>. Pay at the stall by cash, UPI or card. No advance needed.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#catalog">See price list</a>
+          <a id="hero-directions" class="btn btn-ghost">📍 Directions</a>
+          <a id="apk-link" class="btn btn-ghost" hidden>⬇ Android app</a>
+        </div>
+      </div>
+      <aside class="offer-card" id="offer-card" hidden>
+        <span class="offer-badge">Bulk offer</span>
+        <p class="offer-big">Extra <strong>10% off</strong></p>
+        <p>on bills above <strong>₹10,000</strong></p>
+        <p class="offer-fine" id="offer-fine"></p>
+      </aside>
+    </section>
+
+    <section class="info-strip">
+      <a id="map-link" class="info-item">
+        <span class="info-icon">📍</span>
+        <span><strong>Visit us</strong><small id="address"></small></span>
+        <span class="info-go">Directions →</span>
+      </a>
+      <div class="info-item">
+        <span class="info-icon">💳</span>
+        <span><strong>Payments</strong><small>Cash · UPI · Credit &amp; Debit cards</small></span>
+      </div>
+      <div class="info-item">
+        <span class="info-icon">🏷️</span>
+        <span><strong>Prices are per box</strong><small>About 20% off on every item</small></span>
+      </div>
+    </section>
+
+    <div class="catalog-head" id="catalog">
+      <div class="tabs" role="tablist">
+        <button role="tab" class="tab" data-section="others" aria-selected="true">🎆 Other Brands</button>
+        <button role="tab" class="tab" data-section="standard" aria-selected="false">⭐ Standard Fireworks</button>
+      </div>
+      <label class="search">
+        <span aria-hidden="true">🔍</span>
+        <input id="search" type="search" placeholder="Search crackers, brands… e.g. 120 shot, sparklers" autocomplete="off" />
+      </label>
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <main class="catalog" id="products" aria-live="polite">
+      <p class="loading">Loading price list…</p>
+    </main>
+
+    <footer class="footer">
+      <div>
+        <strong>Best FireWorks</strong>
+        <p id="footer-address"></p>
+        <p id="footer-phones"></p>
+      </div>
+      <div class="footer-note">
+        <p>Online booking is a reservation only. We call you to confirm, and you pay and collect at the stall. Prices shown are our selling price and discount, not MRP.</p>
+        <p>Please follow local rules on firecracker use and timings. Keep children supervised.</p>
+      </div>
+    </footer>
+
+    <div class="cartbar" id="cartbar" hidden>
+      <div class="cartbar-info">
+        <strong id="cartbar-total">₹0</strong>
+        <small id="cartbar-meta">0 items</small>
+      </div>
+      <button class="btn btn-gold" id="cartbar-open" type="button">Book now →</button>
+    </div>
+
+    <!-- Cart + checkout -->
+    <dialog class="sheet" id="cart-sheet" aria-labelledby="cart-title">
+      <div class="sheet-head">
+        <h2 id="cart-title">Your order</h2>
+        <button class="close" type="button" data-close aria-label="Close">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div id="cart-lines"></div>
+        <div id="cart-totals"></div>
+
+        <form id="checkout" class="checkout" novalidate>
+          <h3>Your details</h3>
+          <label>Name
+            <input name="name" required minlength="2" maxlength="80" autocomplete="name" placeholder="Full name" />
+          </label>
+          <label>Mobile number
+            <span class="phone-input"><span>+91</span><input name="phone" required inputmode="numeric" maxlength="10" autocomplete="tel-national" placeholder="10-digit mobile" /></span>
+          </label>
+          <label>Area / colony <small>(optional)</small>
+            <input name="area" maxlength="80" placeholder="e.g. Bachupally, Nizampet" />
+          </label>
+          <fieldset class="fulfil" id="fulfil-group">
+            <legend>How will you collect?</legend>
+            <label class="radio"><input type="radio" name="fulfilment" value="pickup" checked /> Pickup at stall</label>
+            <label class="radio" id="delivery-option" hidden><input type="radio" name="fulfilment" value="delivery" /> Home delivery (charges confirmed on call)</label>
+          </fieldset>
+          <label id="address-field" hidden>Delivery address
+            <textarea name="address" maxlength="300" rows="2" placeholder="House no, street, landmark"></textarea>
+          </label>
+          <label>Preferred pickup date <small>(optional)</small>
+            <input name="pickupDate" type="date" />
+          </label>
+          <label>Note for the shop <small>(optional)</small>
+            <textarea name="note" maxlength="500" rows="2" placeholder="Anything we should know"></textarea>
+          </label>
+          <p class="form-error" id="form-error" role="alert" hidden></p>
+          <button class="btn btn-primary btn-block" id="submit-order" type="submit">Book order</button>
+          <p class="fine">No payment now. The shop will call you to confirm. Pay at the stall when you collect.</p>
+        </form>
+      </div>
+    </dialog>
+
+    <!-- Order placed -->
+    <dialog class="sheet" id="done-sheet" aria-labelledby="done-title">
+      <div class="sheet-head">
+        <h2 id="done-title">Order booked 🎉</h2>
+        <button class="close" type="button" data-close aria-label="Close">✕</button>
+      </div>
+      <div class="sheet-body" id="done-body"></div>
+    </dialog>
+
+    <!-- My orders -->
+    <dialog class="sheet" id="orders-sheet" aria-labelledby="orders-title">
+      <div class="sheet-head">
+        <h2 id="orders-title">My orders</h2>
+        <button class="close" type="button" data-close aria-label="Close">✕</button>
+      </div>
+      <div class="sheet-body">
+        <form class="track-form" id="track-form">
+          <label>Track an order by code
+            <span class="row">
+              <span class="code-input"><span>BFW-</span><input name="code" placeholder="K7Q2M" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="9" data-code-input /></span>
+              <button class="btn btn-primary" type="submit">Track</button>
+            </span>
+          </label>
+        </form>
+        <div id="my-orders"></div>
+      </div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

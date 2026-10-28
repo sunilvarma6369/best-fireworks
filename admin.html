@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Shop Admin – Best FireWorks</title>
+    <meta name="theme-color" content="#5b0b16" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/admin.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/styles/base.css" />
+    <link rel="stylesheet" href="/src/styles/admin.css" />
+  </head>
+  <body>
+    <header class="a-top">
+      <div class="a-brand">
+        <img src="/icons/favicon.svg" alt="" width="34" height="34" />
+        <span><strong>Best FireWorks</strong><small>Shop admin</small></span>
+      </div>
+      <div class="a-top-right" id="top-right" hidden>
+        <span class="pill" id="alert-pill">🔕 Alerts off</span>
+        <button class="btn btn-sm btn-soft" id="sign-out" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <!-- Not configured -->
+    <section class="a-card a-narrow" id="setup-view" hidden>
+      <h1>Almost there</h1>
+      <p>Firebase is not set up yet. Paste your Firebase web config into <code>src/config.js</code>, then rebuild. See README.md, step 2.</p>
+    </section>
+
+    <!-- Login -->
+    <section class="a-card a-narrow" id="login-view" hidden>
+      <h1>Shop login</h1>
+      <form id="login-form" class="a-form">
+        <label>Email <input name="email" type="email" autocomplete="username" required /></label>
+        <label>Password <input name="password" type="password" autocomplete="current-password" required /></label>
+        <p class="a-error" id="login-error" hidden></p>
+        <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+        <button class="link" id="forgot" type="button">Forgot password?</button>
+      </form>
+    </section>
+
+    <!-- Logged in but not an admin -->
+    <section class="a-card a-narrow" id="denied-view" hidden>
+      <h1>Not an admin yet</h1>
+      <p>This login works, but it is not on the shop's admin list. In the Firebase console, open <strong>Firestore Database</strong>, create a collection <code>admins</code>, and add a document whose ID is:</p>
+      <p class="uid-box"><code id="my-uid"></code> <button class="btn btn-sm btn-soft" id="copy-uid" type="button">Copy</button></p>
+      <p>Give it one field, for example <code>name</code> = your name. Then reload this page.</p>
+    </section>
+
+    <!-- Main app -->
+    <section id="app-view" hidden>
+      <div class="new-banner" id="new-banner" hidden>
+        <span id="new-banner-text"></span>
+        <span class="banner-btns">
+          <a class="btn btn-sm btn-wa" id="new-banner-call" hidden>📞 Call</a>
+          <button class="btn btn-sm btn-soft" id="new-banner-open" type="button">Open</button>
+        </span>
+      </div>
+
+      <div class="alert-setup" id="alert-setup">
+        <div>
+          <strong>Turn on new-order alerts</strong>
+          <p>Plays a sound and shows a notification on this device whenever a customer books.</p>
+        </div>
+        <button class="btn btn-gold" id="enable-alerts" type="button">🔔 Turn on alerts</button>
+      </div>
+
+      <nav class="a-tabs" role="tablist">
+        <button class="a-tab" role="tab" data-tab="orders" aria-selected="true">Orders <span class="count" id="new-count" hidden></span></button>
+        <button class="a-tab" role="tab" data-tab="products" aria-selected="false">Sold out</button>
+        <button class="a-tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
+      </nav>
+
+      <div class="a-panel" id="tab-orders">
+        <div class="a-toolbar">
+          <form class="quick-find" id="quick-find" autocomplete="off">
+            <label for="quick-code">Open order</label>
+            <span class="qf-box"><span>BFW-</span><input id="quick-code" placeholder="K7Q2M" maxlength="9" autocapitalize="characters" spellcheck="false" /></span>
+            <span class="qf-msg" id="quick-msg"></span>
+          </form>
+          <div class="status-chips" id="status-chips"></div>
+          <div class="a-toolbar-row">
+            <input type="search" id="order-search" placeholder="Search name, phone or code (no hyphen needed)" />
+            <button class="btn btn-sm btn-soft" id="export-csv" type="button">⬇ CSV</button>
+          </div>
+        </div>
+        <div id="order-list" class="order-list"><p class="muted">Loading orders…</p></div>
+      </div>
+
+      <div class="a-panel" id="tab-products" hidden>
+        <p class="muted">Tick an item to show it as <strong>Sold out</strong> on the website and app. Customers cannot order it until you untick it.</p>
+        <input type="search" id="product-search" placeholder="Search items" />
+        <div id="product-list"></div>
+      </div>
+
+      <div class="a-panel" id="tab-settings" hidden>
+        <form id="settings-form" class="a-card a-form">
+          <h2>Online booking</h2>
+          <label class="switch"><input type="checkbox" name="ordersOpen" /> Accept online orders</label>
+          <label>Notice banner on website <small>(leave empty to hide)</small>
+            <input name="notice" maxlength="200" placeholder="e.g. Stall open 9 am – 11 pm. Call for bulk orders." />
+          </label>
+          <button class="btn btn-primary" type="submit">Save</button>
+        </form>
+        <div class="a-card a-form">
+          <h2>Alerts on this device</h2>
+          <label class="switch"><input type="checkbox" id="opt-sound" /> Play sound for new orders</label>
+          <label class="switch"><input type="checkbox" id="opt-repeat" /> Repeat the sound every minute until an order is confirmed</label>
+          <label class="switch"><input type="checkbox" id="opt-wake" /> Keep this screen on while the page is open</label>
+          <button class="btn btn-soft" id="test-alert" type="button">Play test alert</button>
+          <p class="muted" id="push-status"></p>
+        </div>
+      </div>
+    </section>
+
+    <dialog class="a-dialog" id="order-dialog" aria-label="Order details">
+      <div id="order-detail"></div>
+    </dialog>
+
+    <div id="print-area"></div>
+    <div class="toast" id="toast" role="status" hidden></div>
+
+    <script type="module" src="/src/admin.js"></script>
+  </body>
+</html>

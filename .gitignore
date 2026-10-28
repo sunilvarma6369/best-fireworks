@@ -1,0 +1,11 @@
+node_modules/
+dist/
+android/
+ios/
+.firebase/
+*.log
+*.jks
+*.keystore
+functions/node_modules/
+.env*
+!.env.live

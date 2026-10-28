@@ -1,0 +1,8 @@
+{
+  "appId": "com.bestfireworks.app",
+  "appName": "Best FireWorks",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#5b0b16"
+  }
+}

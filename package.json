@@ -1,0 +1,28 @@
+{
+  "name": "best-fireworks",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Best FireWorks – Diwali order booking website and Android app",
+  "type": "module",
+  "scripts": {
+    "prices": "node scripts/build-price-list.mjs",
+    "dev": "npm run prices && vite --host",
+    "dev:live": "npm run prices && vite --host --mode live",
+    "emulators": "firebase emulators:start --only auth,firestore --project demo-best-fireworks",
+    "seed": "node scripts/seed-emulator.mjs",
+    "test:e2e": "node scripts/e2e-emulator.mjs",
+    "build": "npm run prices && vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && firebase deploy --only hosting,firestore",
+    "deploy:functions": "npm --prefix functions install && firebase deploy --only functions"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "firebase": "^13.1.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
+    "vite": "^7.3.7"
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.0",
+  "season": "Diwali 2026",
+  "currency": "INR",
+  "store": {
+    "name": "Best FireWorks",
+    "tagline": "Sivakasi Factory Outlet",
+    "type": "Wholesale & Retail",
+    "phones": ["+918885456439", "+916302596791"],
+    "whatsapp": "+918885456439",
+    "address": {
+      "line1": "Beside Arunachalam Pure Veg & Hotel Varsha Grand",
+      "line2": "Opposite KGR Convention",
+      "area": "Simhapuri Colony",
+      "locality": "Bachupally",
+      "city": "Hyderabad",
+      "state": "Telangana",
+      "pincode": "500090",
+      "country": "IN",
+      "display": "Beside Arunachalam Pure Veg & Hotel Varsha Grand, Opposite KGR Convention, Simhapuri Colony, Bachupally – 500090"
+    },
+    "location": { "lat": 17.541226, "lng": 78.392342 },
+    "mapsUrl": "https://maps.app.goo.gl/EsL975w52ncw7Ndm6",
+    "directionsUrl": "https://www.google.com/maps/dir/?api=1&destination=17.541226,78.392342",
+    "whatsappOrderUrl": "https://wa.me/918885456439?text=Hi%2C%20I%20want%20crackers%20for%20Diwali",
+    "openingDate": "2026-11-05",
+    "paymentMethods": ["Cash", "UPI", "Credit Card", "Debit Card"],
+    "yearsInBusiness": 4,
+    "sameLocationAsLastYear": true
+  },
+  "pricing": {
+    "fields": {
+      "amount": "Selling price before discount (NOT MRP)",
+      "discount": "Discount in rupees off amount",
+      "finalPrice": "Price customer pays = amount - discount"
+    },
+    "defaultDiscountPercent": 20
+  },
+  "offers": [
+    {
+      "id": "BULK10",
+      "name": "Extra 10% off",
+      "description": "Extra 10% off on purchases above ₹10,000 in a single bill",
+      "type": "percent",
+      "value": 10,
+      "minBillAmount": 10000,
+      "minBillComparison": "greater_than",
+      "appliesOn": "sum of finalPrice x qty of eligible items",
+      "validUntil": "2026-11-05",
+      "singleBillOnly": true,
+      "excludedCategoryIds": ["oth-fancy-guns-ring-caps-rolls"],
+      "excludedProductIds": ["OTH-091"],
+      "excludedNote": "Not applicable on pop pop, wonder through, guns & ring caps (Others list). Standard list states no exclusions."
+    }
+  ],
+  "sections": [
+    { "id": "standard", "name": "Standard Fireworks", "description": "Standard brand (premium)" },
+    { "id": "others", "name": "Other Brands", "description": "All other brands" }
+  ],
+  "categoryNotes": {
+    "oth-fancy-guns-ring-caps-rolls": "All types of fancy guns available"
+  },
+  "removedProducts": [
+    {
+      "name": "12 SHOT",
+      "brand": "KANISHAR",
+      "section": "others",
+      "category": "Shots",
+      "reason": "Price was 0 in source sheet; not listed"
+    }
+  ]
+}

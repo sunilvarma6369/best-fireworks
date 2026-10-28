@@ -1,0 +1,96 @@
+name: Android APK
+
+# Every push to main builds a new APK and publishes it as a GitHub Release.
+# Stable download link: https://github.com/<user>/<repo>/releases/latest/download/BestFireWorks.apk
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+      - run: npm run build
+
+      # The native Android project is generated fresh on every build, so nothing Android-specific lives in the repo.
+      - name: Create Android project
+        run: npx cap add android
+
+      - name: App icon and splash screen
+        continue-on-error: true
+        run: npx --yes @capacitor/assets@3.0.5 generate --android
+
+      - name: Set version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          sed -i -E "s/versionCode [0-9]+/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
+
+      - run: npx cap sync android
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      # Uses your own signing key when the ANDROID_* secrets are set (README step 5), so phones can install
+      # updates over the old app. Without them a throwaway key is used and users must uninstall before updating.
+      - name: Sign APK
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > release.jks
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 secret not set. Signing with a temporary key; installing an update will require uninstalling the old app first."
+            KS_PASS=temporary KEY_PASS=temporary KEY_ALIAS=temp
+            keytool -genkeypair -keystore release.jks -storepass "$KS_PASS" -keypass "$KEY_PASS" -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Best FireWorks"
+          fi
+          export KS_PASS KEY_PASS
+          "$BUILD_TOOLS/zipalign" -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
+          "$BUILD_TOOLS/apksigner" sign --ks release.jks --ks-pass env:KS_PASS --ks-key-alias "$KEY_ALIAS" \
+            --key-pass env:KEY_PASS --out BestFireWorks.apk aligned.apk
+          "$BUILD_TOOLS/apksigner" verify BestFireWorks.apk
+          rm -f release.jks
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BestFireWorks-apk
+          path: BestFireWorks.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-build-${{ github.run_number }}
+          name: Best FireWorks app (build ${{ github.run_number }})
+          body: |
+            Android app for Best FireWorks. Download **BestFireWorks.apk** below and open it on your phone
+            (allow "Install unknown apps" for your browser if asked).
+          files: BestFireWorks.apk
+          make_latest: true

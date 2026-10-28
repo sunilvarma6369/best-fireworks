@@ -1,0 +1,148 @@
+.track-page {
+  padding-bottom: 2rem;
+}
+.track-wrap {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 1rem 16px;
+}
+.card {
+  padding: 1rem;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.track-result {
+  margin-top: 1rem;
+}
+.track-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.track-head h1 {
+  margin: 0;
+  font-size: 1.7rem;
+  letter-spacing: 0.04em;
+}
+.track-help {
+  margin: 0.5rem 0 0;
+}
+.shop-msg {
+  margin: 0.9rem 0 0;
+  padding: 0.7rem 0.9rem;
+  border-left: 4px solid var(--gold);
+  border-radius: var(--radius-sm);
+  background: var(--gold-soft);
+  color: var(--gold-ink);
+}
+.timeline {
+  margin: 1.2rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.timeline li {
+  position: relative;
+  padding: 0 0 1.1rem 2.2rem;
+  color: var(--muted);
+}
+.timeline li::before {
+  content: '';
+  position: absolute;
+  left: 0.45rem;
+  top: 0.35rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2.5px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+}
+.timeline li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 0.85rem;
+  top: 1.3rem;
+  bottom: 0;
+  width: 2.5px;
+  background: var(--border);
+}
+.timeline li.done {
+  color: var(--text);
+}
+.timeline li.done::before {
+  border-color: var(--success);
+  background: var(--success);
+}
+.timeline li.done:not(:last-child)::after {
+  background: var(--success);
+}
+.timeline li.current {
+  font-weight: 700;
+}
+.timeline li.current::before {
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--success) 25%, transparent);
+}
+.track-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+.track-facts div {
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.track-facts small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.track-facts strong {
+  font-size: 1.05rem;
+}
+.saved h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+.saved .muted {
+  margin: 0.1rem 0 0.8rem;
+  font-size: 0.85rem;
+}
+.saved-items {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.92rem;
+}
+.saved-items li,
+.saved-totals div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.saved-items small {
+  color: var(--muted);
+}
+.saved-totals div {
+  border: 0;
+  padding: 0.15rem 0;
+}
+.saved-totals .save {
+  color: var(--success);
+}
+.saved-totals .net {
+  margin-top: 0.3rem;
+  padding-top: 0.45rem;
+  border-top: 1.5px dashed var(--border);
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+.track-actions {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}

@@ -1,0 +1,34 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// The one file to edit after creating your Firebase project. See README.md.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Firebase console → Project settings → General → Your apps → Web app → "SDK setup and configuration".
+// These values are public by design; security comes from firestore.rules.
+export const firebaseConfig = {
+  apiKey: 'AIzaSyBotj6t_CWD1U7t5evm0EaMY0sZgvwhNXA',
+  authDomain: 'best-fireworks-98d13.firebaseapp.com',
+  projectId: 'best-fireworks-98d13',
+  storageBucket: 'best-fireworks-98d13.firebasestorage.app',
+  messagingSenderId: '961701498818',
+  appId: '1:961701498818:web:536732d5ca5a969c8b505b',
+};
+
+// Firebase console → Project settings → Cloud Messaging → Web Push certificates → "Key pair".
+// Only needed for push notifications to the shop's phone (admin page).
+export const vapidKey = 'YOUR-WEB-PUSH-VAPID-KEY';
+
+// Your live website. The Android app downloads the latest price list from here,
+// and order-tracking links sent to customers point here.
+export const SITE_URL = 'https://best-fireworks-98d13.web.app';
+
+// "Download Android app" link shown on the website. The GitHub workflow publishes the APK under this name.
+// Leave as '' to hide the link (for example while the GitHub repo is private).
+export const APK_URL = 'https://github.com/sunilvarma6369/best-fireworks/releases/latest/download/BestFireWorks.apk';
+
+export const ORDER_OPTIONS = {
+  // Pickup at the stall is always offered. Turn this on only if the shop delivers.
+  deliveryEnabled: false,
+  maxQtyPerItem: 500,
+};
+
+export const isFirebaseConfigured = !firebaseConfig.apiKey.startsWith('YOUR-');

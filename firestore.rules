@@ -1,0 +1,93 @@
+rules_version = '2';
+
+// Data model
+//   orders/{code}       full order with customer name/phone and the private 4-digit pickup code.
+//                       Customers create, only admins read/update.
+//   tracking/{code}     public status for the customer (no personal details). Readable by anyone who has the code.
+//   settings/public     sold-out list, notice banner, ordersOpen flag. Public read, admin write.
+//   admins/{uid}        one doc per shop staff login. Create these by hand in the Firebase console.
+//   adminTokens/{token} push-notification tokens of shop devices (used by the Cloud Function).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Same format as src/lib/codes.js
+    function validCode(code) {
+      return code.matches('^BFW-[A-HJ-NP-Z2-9]{5}$');
+    }
+
+    function ordersOpen() {
+      return !exists(/databases/$(database)/documents/settings/public)
+        || get(/databases/$(database)/documents/settings/public).data.get('ordersOpen', true) != false;
+    }
+
+    function optionalString(d, key, max) {
+      return !(key in d) || (d[key] is string && d[key].size() <= max);
+    }
+
+    function validNewOrder(code) {
+      let d = request.resource.data;
+      return d.keys().hasAll(['code', 'pickupCode', 'status', 'createdAt', 'customer', 'fulfilment', 'items', 'totals', 'source'])
+        && d.keys().hasOnly(['code', 'pickupCode', 'status', 'createdAt', 'customer', 'fulfilment', 'address', 'pickupDate',
+                             'note', 'items', 'totals', 'source', 'priceListDate'])
+        && d.code == code
+        && d.pickupCode is string && d.pickupCode.matches('^[0-9]{4}$')
+        && d.status == 'new'
+        && d.createdAt == request.time
+        && d.customer is map
+        && d.customer.keys().hasOnly(['name', 'phone', 'area'])
+        && d.customer.name is string && d.customer.name.size() >= 2 && d.customer.name.size() <= 80
+        && d.customer.phone is string && d.customer.phone.matches('^[6-9][0-9]{9}$')
+        && optionalString(d.customer, 'area', 80)
+        && d.fulfilment in ['pickup', 'delivery']
+        && optionalString(d, 'address', 300)
+        && optionalString(d, 'pickupDate', 10)
+        && optionalString(d, 'note', 500)
+        && optionalString(d, 'source', 20)
+        && optionalString(d, 'priceListDate', 10)
+        && d.items is list && d.items.size() >= 1 && d.items.size() <= 200
+        && d.totals is map && d.totals.netPayable is number && d.totals.netPayable > 0
+        && ordersOpen();
+    }
+
+    match /orders/{code} {
+      allow create: if validCode(code) && validNewOrder(code);
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /tracking/{code} {
+      // Codes are random, so only someone who was given the code can look it up. Listing is admin-only.
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if isAdmin() || validCode(code)
+        && request.resource.data.keys().hasOnly(['code', 'status', 'createdAt', 'updatedAt', 'itemCount',
+                                                 'netPayable', 'fulfilment', 'pickupDate', 'message'])
+        && request.resource.data.code == code
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && getAfter(/databases/$(database)/documents/orders/$(code)).data.totals.netPayable
+           == request.resource.data.netPayable;
+      allow update, delete: if isAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /adminTokens/{token} {
+      allow read, delete: if isAdmin();
+      allow create, update: if isAdmin() && request.resource.data.uid == request.auth.uid;
+    }
+  }
+}
