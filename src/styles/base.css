@@ -1,69 +1,40 @@
+/* Best FireWorks — "Diwali night" theme: deep midnight, gold accents, ivory text. Shared by the website,
+   tracking page, admin page and the BFW Admin app. */
 :root {
-  --bg: #fff8f0;
-  --surface: #ffffff;
-  --surface-2: #fdf0e3;
-  --text: #2a1215;
-  --muted: #76585b;
-  --border: #ecd9c9;
-  --brand: #8a1424;
-  --brand-deep: #5b0b16;
-  --brand-ink: #ffffff;
-  --gold: #e3a21a;
-  --gold-soft: #fff1cc;
-  --gold-ink: #3d2600;
-  --saffron: #e8601c;
-  --success: #1e7a46;
-  --success-soft: #e3f4ea;
-  --danger: #b3261e;
-  --danger-soft: #fde8e6;
-  --info-soft: #e8f0fd;
-  --radius: 14px;
-  --radius-sm: 9px;
-  --shadow: 0 1px 2px rgb(60 20 20 / 6%), 0 6px 20px rgb(60 20 20 / 7%);
-  --font-display: 'Baloo 2', system-ui, sans-serif;
-  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --bg: #150a0c;
-    --surface: #211316;
-    --surface-2: #2c1a1d;
-    --text: #f7e9e3;
-    --muted: #c3a7a5;
-    --border: #3d2629;
-    --brand: #d9475a;
-    --brand-deep: #3a070f;
-    --gold: #f0b43a;
-    --gold-soft: #3a2a0a;
-    --gold-ink: #ffe7ad;
-    --success: #5cc98a;
-    --success-soft: #133222;
-    --danger: #ff8a80;
-    --danger-soft: #3b1512;
-    --info-soft: #17233a;
-    --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 6px 20px rgb(0 0 0 / 35%);
-    color-scheme: dark;
-  }
-}
-:root[data-theme='dark'] {
-  --bg: #150a0c;
-  --surface: #211316;
-  --surface-2: #2c1a1d;
-  --text: #f7e9e3;
-  --muted: #c3a7a5;
-  --border: #3d2629;
-  --brand: #d9475a;
-  --brand-deep: #3a070f;
-  --gold: #f0b43a;
-  --gold-soft: #3a2a0a;
-  --gold-ink: #ffe7ad;
-  --success: #5cc98a;
-  --success-soft: #133222;
-  --danger: #ff8a80;
-  --danger-soft: #3b1512;
-  --info-soft: #17233a;
+  --bg: #0c0a10;
+  --bg-glow: radial-gradient(1200px 600px at 85% -10%, rgb(194 38 58 / 16%), transparent 60%),
+    radial-gradient(900px 500px at -10% 30%, rgb(229 180 88 / 8%), transparent 60%);
+  --surface: #16131c;
+  --surface-2: #1f1a26;
+  --surface-3: #2a2332;
+  --text: #f6efe4;
+  --muted: #a99f93;
+  --border: #2e2735;
+  --hairline: rgb(233 196 106 / 18%);
+  --brand: #e5b458;
+  --brand-ink: #1a1206;
+  --brand-deep: #0f0c14;
+  --gold: #e5b458;
+  --gold-grad: linear-gradient(135deg, #f8e1a1 0%, #e5b458 45%, #c48a2c 100%);
+  --gold-soft: rgb(229 180 88 / 12%);
+  --gold-ink: #f3d48a;
+  --crimson: #c2263a;
+  --saffron: #f08a3c;
+  --success: #6fdca5;
+  --success-soft: rgb(111 220 165 / 12%);
+  --danger: #ff8080;
+  --danger-soft: rgb(255 128 128 / 12%);
+  --info: #8fb2ff;
+  --info-soft: rgb(143 178 255 / 13%);
+  --radius: 16px;
+  --radius-sm: 11px;
+  --shadow: 0 1px 0 rgb(255 255 255 / 3%) inset, 0 12px 32px rgb(0 0 0 / 45%);
+  --glow: 0 0 0 1px var(--hairline), 0 10px 30px rgb(229 180 88 / 14%);
+  --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --font-body: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Safe areas: browsers fill env(); the Android app (Capacitor) also provides --safe-area-inset-* */
+  --safe-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
   color-scheme: dark;
 }
 
@@ -81,24 +52,34 @@
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  background: var(--bg);
 }
 
 body {
   margin: 0;
-  background: var(--bg);
+  min-height: 100vh;
+  background: var(--bg-glow), var(--bg);
+  background-attachment: fixed;
   color: var(--text);
-  font: 16px/1.5 var(--font-body);
+  font: 16px/1.55 var(--font-body);
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
 h1, h2, h3 {
   font-family: var(--font-display);
+  font-weight: 700;
   line-height: 1.15;
+  letter-spacing: 0.005em;
   margin: 0 0 0.4em;
 }
 
 a {
   color: inherit;
+}
+
+::selection {
+  background: rgb(229 180 88 / 35%);
 }
 
 button,
@@ -113,102 +94,127 @@ input,
 select,
 textarea {
   width: 100%;
-  padding: 0.65rem 0.8rem;
-  border: 1.5px solid var(--border);
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--surface);
-  min-height: 44px;
+  background: var(--surface-2);
+  min-height: 46px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+input::placeholder,
+textarea::placeholder {
+  color: #6f675f;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgb(229 180 88 / 60%);
 }
 
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 button:focus-visible,
-a:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--gold) 70%, transparent);
-  outline-offset: 1px;
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  min-height: 44px;
-  padding: 0.6rem 1.1rem;
+  gap: 0.45rem;
+  min-height: 46px;
+  padding: 0.6rem 1.25rem;
   border: 0;
   border-radius: 999px;
   font-weight: 700;
+  letter-spacing: 0.01em;
   text-decoration: none;
   cursor: pointer;
-  transition: transform 0.08s ease, filter 0.15s ease;
+  transition: transform 0.08s ease, filter 0.15s ease, box-shadow 0.2s ease, background 0.15s ease;
 }
 .btn:active {
   transform: scale(0.97);
 }
 .btn:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
 }
-.btn-primary {
-  background: var(--brand);
-  color: var(--brand-ink);
-}
+.btn-primary,
 .btn-gold {
-  background: var(--gold);
-  color: #2b1a00;
+  background: var(--gold-grad);
+  color: var(--brand-ink);
+  box-shadow: 0 6px 20px rgb(229 180 88 / 25%), 0 1px 0 rgb(255 255 255 / 40%) inset;
+}
+.btn-primary:hover,
+.btn-gold:hover {
+  filter: brightness(1.06);
 }
 .btn-ghost {
-  background: transparent;
-  color: inherit;
-  border: 1.5px solid currentColor;
+  background: rgb(255 255 255 / 4%);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--hairline) inset;
+}
+.btn-ghost:hover {
+  background: rgb(255 255 255 / 8%);
 }
 .btn-soft {
   background: var(--surface-2);
   color: var(--text);
+  box-shadow: 0 0 0 1px var(--border) inset;
+}
+.btn-soft:hover {
+  background: var(--surface-3);
 }
 .btn-danger {
   background: var(--danger-soft);
   color: var(--danger);
+  box-shadow: 0 0 0 1px rgb(255 128 128 / 25%) inset;
+}
+.btn-wa {
+  background: linear-gradient(135deg, #2bd47a, #179e57);
+  color: #04170c;
+  box-shadow: 0 6px 18px rgb(43 212 122 / 22%);
 }
 .btn-block {
   width: 100%;
 }
 .btn-sm {
-  min-height: 34px;
-  padding: 0.3rem 0.8rem;
-  font-size: 0.9rem;
+  min-height: 36px;
+  padding: 0.3rem 0.9rem;
+  font-size: 0.88rem;
 }
 
 .badge {
   display: inline-block;
-  padding: 0.1rem 0.55rem;
+  padding: 0.15rem 0.6rem;
   border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 700;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
-.status-new { background: var(--gold-soft); color: var(--gold-ink); }
-.status-confirmed { background: var(--info-soft); color: #2456b3; }
-.status-ready { background: var(--success-soft); color: var(--success); }
-.status-completed { background: var(--surface-2); color: var(--muted); }
-.status-cancelled { background: var(--danger-soft); color: var(--danger); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .status-confirmed { color: #8fb4ff; }
-}
+.status-new { background: var(--gold-soft); color: var(--gold-ink); box-shadow: 0 0 0 1px rgb(229 180 88 / 30%) inset; }
+.status-confirmed { background: var(--info-soft); color: var(--info); box-shadow: 0 0 0 1px rgb(143 178 255 / 30%) inset; }
+.status-ready { background: var(--success-soft); color: var(--success); box-shadow: 0 0 0 1px rgb(111 220 165 / 30%) inset; }
+.status-completed { background: var(--surface-3); color: var(--muted); }
+.status-cancelled { background: var(--danger-soft); color: var(--danger); box-shadow: 0 0 0 1px rgb(255 128 128 / 25%) inset; }
 
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(90px + env(safe-area-inset-bottom));
+  bottom: calc(96px + var(--safe-bottom));
   transform: translateX(-50%);
   max-width: calc(100% - 32px);
-  padding: 0.7rem 1.1rem;
+  padding: 0.75rem 1.2rem;
   border-radius: 999px;
-  background: var(--text);
-  color: var(--bg);
-  font-weight: 600;
-  box-shadow: var(--shadow);
+  background: #f6efe4;
+  color: #16131c;
+  font-weight: 700;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 50%);
   z-index: 100;
 }
 
@@ -225,8 +231,16 @@ a:focus-visible {
   white-space: nowrap;
 }
 
+/* Gold hairline divider used by headers and sheets */
+.gold-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(229 180 88 / 45%), transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
     transition: none !important;
     animation: none !important;
     scroll-behavior: auto !important;

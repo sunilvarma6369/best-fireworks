@@ -3,7 +3,7 @@
   "appName": "BFW Admin",
   "webDir": "dist-app",
   "android": {
-    "backgroundColor": "#5b0b16"
+    "backgroundColor": "#0c0a10"
   },
   "plugins": {
     "PushNotifications": {

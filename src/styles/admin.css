@@ -10,24 +10,38 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: calc(0.55rem + env(safe-area-inset-top)) 16px 0.55rem;
-  background: var(--brand-deep);
-  color: #fff;
+  padding: calc(0.6rem + var(--safe-top)) 16px 0.6rem;
+  background: rgb(12 10 16 / 85%);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text);
 }
 .a-brand {
   display: flex;
   align-items: center;
   gap: 0.55rem;
 }
+.a-brand img {
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px var(--hairline);
+}
 .a-brand strong {
   display: block;
   font-family: var(--font-display);
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   line-height: 1.1;
+  background: var(--gold-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 .a-brand small {
-  opacity: 0.8;
-  font-size: 0.75rem;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 .a-top-right {
   display: flex;
@@ -39,23 +53,26 @@ body {
   white-space: nowrap;
 }
 .pill {
-  padding: 0.25rem 0.65rem;
+  padding: 0.25rem 0.7rem;
   border-radius: 999px;
-  background: rgb(255 255 255 / 12%);
+  background: rgb(255 255 255 / 6%);
+  box-shadow: 0 0 0 1px var(--border) inset;
   font-size: 0.8rem;
   font-weight: 600;
   white-space: nowrap;
 }
 .pill.on {
-  background: var(--success);
+  background: var(--success-soft);
+  box-shadow: 0 0 0 1px rgb(111 220 165 / 35%) inset;
+  color: var(--success);
 }
 
 .a-card {
   margin: 1rem 16px;
-  padding: 1.1rem;
+  padding: 1.2rem;
   border-radius: var(--radius);
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: 0 0 0 1px var(--hairline) inset, var(--shadow);
 }
 .a-narrow {
   max-width: 440px;
@@ -129,16 +146,17 @@ code {
 
 .new-banner {
   position: sticky;
-  top: calc(52px + env(safe-area-inset-top));
+  top: calc(58px + var(--safe-top));
   z-index: 15;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.7rem 16px;
-  background: var(--gold);
-  color: #2b1a00;
-  font-weight: 700;
+  background: var(--gold-grad);
+  color: var(--brand-ink);
+  font-weight: 800;
+  box-shadow: 0 10px 30px rgb(229 180 88 / 25%);
   animation: flash 1s ease 3;
 }
 @keyframes flash {
@@ -187,15 +205,16 @@ code {
   white-space: nowrap;
 }
 .a-tab[aria-selected='true'] {
-  background: var(--brand);
+  background: var(--gold-grad);
   color: var(--brand-ink);
+  box-shadow: 0 6px 18px rgb(229 180 88 / 25%);
 }
 .count {
   min-width: 1.4rem;
   padding: 0 0.35rem;
   border-radius: 999px;
   background: var(--gold);
-  color: #2b1a00;
+  color: var(--brand-ink);
   font-size: 0.8rem;
   text-align: center;
 }
@@ -324,7 +343,7 @@ code {
   border-left-color: var(--gold);
 }
 .o-card.st-confirmed {
-  border-left-color: #2f6fe0;
+  border-left-color: var(--info);
 }
 .o-card.st-ready {
   border-left-color: var(--success);
@@ -499,12 +518,14 @@ code {
   margin: auto auto 0;
   padding: 0;
   border: 0;
-  border-radius: 18px 18px 0 0;
-  background: var(--bg);
+  border-radius: 24px 24px 0 0;
+  background: #121017;
   color: var(--text);
+  box-shadow: 0 0 0 1px var(--hairline), 0 -20px 60px rgb(0 0 0 / 60%);
 }
 .a-dialog::backdrop {
-  background: rgb(20 5 8 / 55%);
+  background: rgb(5 3 8 / 70%);
+  backdrop-filter: blur(3px);
 }
 @media (min-width: 640px) {
   .a-dialog {
@@ -522,8 +543,9 @@ code {
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.85rem 16px 0.6rem;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
+  background: rgb(18 16 23 / 94%);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--hairline);
 }
 .d-head h2 {
   margin: 0;
@@ -533,7 +555,7 @@ code {
 .d-body {
   display: grid;
   gap: 0.9rem;
-  padding: 0.9rem 16px calc(1.4rem + env(safe-area-inset-bottom));
+  padding: 0.9rem 16px calc(1.4rem + var(--safe-bottom));
 }
 .close {
   width: 40px;
@@ -561,10 +583,7 @@ code {
   gap: 0.4rem;
   margin-top: 0.4rem;
 }
-.btn-wa {
-  background: #1f8f4e;
-  color: #fff;
-}
+
 .items {
   width: 100%;
   border-collapse: collapse;
@@ -911,4 +930,8 @@ code {
 .split-row strong small {
   color: var(--muted);
   font-weight: 600;
+}
+.a-tab[aria-selected='true'] .count {
+  background: var(--brand-ink);
+  color: var(--gold-ink);
 }
