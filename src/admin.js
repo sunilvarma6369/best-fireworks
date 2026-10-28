@@ -950,7 +950,7 @@ function setupNativeApp() {
     if (!state.user) return;
     try {
       await setDoc(doc(db, 'adminTokens', token), {
-        uid: state.user.uid, email: state.user.email ?? '', platform: 'android', device: 'BFW Admin app',
+        uid: state.user.uid, email: state.user.email ?? '', platform: 'android', device: 'Best FireWorks app',
         updatedAt: serverTimestamp(),
       });
       nativePushOn = true;

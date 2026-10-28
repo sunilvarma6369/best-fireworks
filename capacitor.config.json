@@ -1,9 +1,9 @@
 {
   "appId": "com.bestfireworks.admin",
-  "appName": "BFW Admin",
+  "appName": "Best FireWorks",
   "webDir": "dist-app",
   "android": {
-    "backgroundColor": "#0c0a10"
+    "backgroundColor": "#f3f4f7"
   },
   "plugins": {
     "PushNotifications": {

@@ -147,16 +147,26 @@ function productHtml(p) {
   const inCart = state.cart.has(p.id) && !isSoldOut(p);
   const excluded = p.bulkOfferEligible ? '' : '<span class="tag" title="Bulk 10% offer does not apply">No bulk offer</span>';
   return `<li class="prod${inCart ? ' in-cart' : ''}${isSoldOut(p) ? ' sold-out' : ''}" data-id="${p.id}">
-      <div>
-        <p class="prod-name"><span class="prod-no">${p.listNo}.</span>${escapeHtml(p.name)}</p>
-        <p class="prod-meta">${escapeHtml(p.brand ?? '—')} · ${pcs}${excluded}</p>
+      <div class="prod-thumb" style="--tint:${categoryTint(p.categoryId)}" aria-hidden="true">
+        ${categoryIcon(p.categoryId)}${off > 0 ? `<em class="ribbon">${off}% OFF</em>` : ''}
+      </div>
+      <div class="prod-info">
+        <p class="prod-name">${escapeHtml(p.name)}</p>
+        <p class="prod-meta"><span class="prod-no">#${p.listNo}</span> · ${escapeHtml(p.brand ?? '—')} · ${pcs}${excluded ? `<br />${excluded}` : ''}</p>
       </div>
       <div class="prod-price">
         <span class="price-final">${formatRupees(p.finalPrice)}</span>
-        ${p.amount > p.finalPrice ? `<span class="price-was">${formatRupees(p.amount)}</span><span class="price-off">${off}% off</span>` : ''}
+        ${p.amount > p.finalPrice ? `<span class="price-was">${formatRupees(p.amount)}</span>` : ''}
       </div>
       <div class="prod-action">${actionHtml(p)}</div>
     </li>`;
+}
+
+// A soft, stable background colour per category for the product picture tile.
+function categoryTint(categoryId) {
+  let h = 0;
+  for (const ch of categoryId) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `hsl(${h} 85% 95%)`;
 }
 
 function categoryGroupHtml(cat, products) {

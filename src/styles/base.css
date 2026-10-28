@@ -1,41 +1,44 @@
-/* Best FireWorks — "Diwali night" theme: deep midnight, gold accents, ivory text. Shared by the website,
-   tracking page, admin page and the BFW Admin app. */
+/* Best FireWorks — clean e-commerce theme: light surfaces, one brand red, amber offers, green savings.
+   Shared by the website, tracking page, admin page and the BFW Admin app. */
 :root {
-  --bg: #0c0a10;
-  --bg-glow: radial-gradient(1200px 600px at 85% -10%, rgb(194 38 58 / 16%), transparent 60%),
-    radial-gradient(900px 500px at -10% 30%, rgb(229 180 88 / 8%), transparent 60%);
-  --surface: #16131c;
-  --surface-2: #1f1a26;
-  --surface-3: #2a2332;
-  --text: #f6efe4;
-  --muted: #a99f93;
-  --border: #2e2735;
-  --hairline: rgb(233 196 106 / 18%);
-  --brand: #e5b458;
-  --brand-ink: #1a1206;
-  --brand-deep: #0f0c14;
-  --gold: #e5b458;
-  --gold-grad: linear-gradient(135deg, #f8e1a1 0%, #e5b458 45%, #c48a2c 100%);
-  --gold-soft: rgb(229 180 88 / 12%);
-  --gold-ink: #f3d48a;
-  --crimson: #c2263a;
-  --saffron: #f08a3c;
-  --success: #6fdca5;
-  --success-soft: rgb(111 220 165 / 12%);
-  --danger: #ff8080;
-  --danger-soft: rgb(255 128 128 / 12%);
-  --info: #8fb2ff;
-  --info-soft: rgb(143 178 255 / 13%);
-  --radius: 16px;
-  --radius-sm: 11px;
-  --shadow: 0 1px 0 rgb(255 255 255 / 3%) inset, 0 12px 32px rgb(0 0 0 / 45%);
-  --glow: 0 0 0 1px var(--hairline), 0 10px 30px rgb(229 180 88 / 14%);
-  --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
-  --font-body: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --bg: #f3f4f7;
+  --bg-glow: none;
+  --surface: #ffffff;
+  --surface-2: #f6f7f9;
+  --surface-3: #eceef2;
+  --text: #1b2130;
+  --muted: #667085;
+  --border: #e3e6ec;
+  --hairline: #e3e6ec;
+  --brand: #d0202e;
+  --brand-dark: #a8141f;
+  --brand-ink: #ffffff;
+  --brand-deep: #b3161f;
+  --brand-soft: #fdecee;
+  /* "gold" names kept for shared components; in this theme they are the brand red (actions) and amber (offers) */
+  --gold: #d0202e;
+  --gold-grad: linear-gradient(135deg, #e0313f 0%, #c01824 100%);
+  --gold-soft: #fff5e1;
+  --gold-ink: #a15c00;
+  --amber: #f5a000;
+  --crimson: #d0202e;
+  --success: #12805c;
+  --success-soft: #e6f5ee;
+  --danger: #d1242f;
+  --danger-soft: #fdecec;
+  --info: #1d5fd6;
+  --info-soft: #eaf1fd;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 4px 14px rgb(16 24 40 / 6%);
+  --shadow-lg: 0 8px 28px rgb(16 24 40 / 12%);
+  --glow: var(--shadow);
+  --font-display: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   /* Safe areas: browsers fill env(); the Android app (Capacitor) also provides --safe-area-inset-* */
   --safe-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
   --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 *,
@@ -58,10 +61,9 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--bg-glow), var(--bg);
-  background-attachment: fixed;
+  background: var(--bg);
   color: var(--text);
-  font: 16px/1.55 var(--font-body);
+  font: 15.5px/1.5 var(--font-body);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
@@ -69,8 +71,8 @@ body {
 h1, h2, h3 {
   font-family: var(--font-display);
   font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: 0.005em;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   margin: 0 0 0.4em;
 }
 
@@ -79,7 +81,7 @@ a {
 }
 
 ::selection {
-  background: rgb(229 180 88 / 35%);
+  background: rgb(208 32 46 / 18%);
 }
 
 button,
@@ -94,30 +96,29 @@ input,
 select,
 textarea {
   width: 100%;
-  padding: 0.7rem 0.85rem;
-  border: 1px solid var(--border);
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #d5d9e0;
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: var(--surface);
   min-height: 46px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 input::placeholder,
 textarea::placeholder {
-  color: #6f675f;
+  color: #98a2b3;
 }
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: rgb(229 180 88 / 60%);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgb(208 32 46 / 12%);
+  outline: none;
 }
 
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
 button:focus-visible,
 a:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -127,39 +128,44 @@ a:focus-visible,
   justify-content: center;
   gap: 0.45rem;
   min-height: 46px;
-  padding: 0.6rem 1.25rem;
+  padding: 0.6rem 1.2rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-weight: 700;
-  letter-spacing: 0.01em;
   text-decoration: none;
   cursor: pointer;
-  transition: transform 0.08s ease, filter 0.15s ease, box-shadow 0.2s ease, background 0.15s ease;
+  transition: transform 0.08s ease, background 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 .btn:active {
-  transform: scale(0.97);
+  transform: scale(0.98);
 }
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.btn-primary,
-.btn-gold {
-  background: var(--gold-grad);
+.btn-primary {
+  background: var(--brand);
   color: var(--brand-ink);
-  box-shadow: 0 6px 20px rgb(229 180 88 / 25%), 0 1px 0 rgb(255 255 255 / 40%) inset;
+  box-shadow: 0 2px 8px rgb(208 32 46 / 28%);
 }
-.btn-primary:hover,
+.btn-primary:hover {
+  background: var(--brand-dark);
+}
+.btn-gold {
+  background: var(--amber);
+  color: #2b1a00;
+  box-shadow: 0 2px 8px rgb(245 160 0 / 30%);
+}
 .btn-gold:hover {
-  filter: brightness(1.06);
+  filter: brightness(1.05);
 }
 .btn-ghost {
-  background: rgb(255 255 255 / 4%);
+  background: var(--surface);
   color: var(--text);
-  box-shadow: 0 0 0 1px var(--hairline) inset;
+  box-shadow: 0 0 0 1px #d5d9e0 inset;
 }
 .btn-ghost:hover {
-  background: rgb(255 255 255 / 8%);
+  background: var(--surface-2);
 }
 .btn-soft {
   background: var(--surface-2);
@@ -172,19 +178,21 @@ a:focus-visible,
 .btn-danger {
   background: var(--danger-soft);
   color: var(--danger);
-  box-shadow: 0 0 0 1px rgb(255 128 128 / 25%) inset;
 }
 .btn-wa {
-  background: linear-gradient(135deg, #2bd47a, #179e57);
-  color: #04170c;
-  box-shadow: 0 6px 18px rgb(43 212 122 / 22%);
+  background: #1faa59;
+  color: #fff;
+  box-shadow: 0 2px 8px rgb(31 170 89 / 25%);
+}
+.btn-wa:hover {
+  background: #178a48;
 }
 .btn-block {
   width: 100%;
 }
 .btn-sm {
   min-height: 36px;
-  padding: 0.3rem 0.9rem;
+  padding: 0.3rem 0.85rem;
   font-size: 0.88rem;
 }
 
@@ -192,16 +200,15 @@ a:focus-visible,
   display: inline-block;
   padding: 0.15rem 0.6rem;
   border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+  font-size: 0.74rem;
+  font-weight: 700;
   white-space: nowrap;
 }
-.status-new { background: var(--gold-soft); color: var(--gold-ink); box-shadow: 0 0 0 1px rgb(229 180 88 / 30%) inset; }
-.status-confirmed { background: var(--info-soft); color: var(--info); box-shadow: 0 0 0 1px rgb(143 178 255 / 30%) inset; }
-.status-ready { background: var(--success-soft); color: var(--success); box-shadow: 0 0 0 1px rgb(111 220 165 / 30%) inset; }
+.status-new { background: #fff5e1; color: #a15c00; }
+.status-confirmed { background: var(--info-soft); color: var(--info); }
+.status-ready { background: var(--success-soft); color: var(--success); }
 .status-completed { background: var(--surface-3); color: var(--muted); }
-.status-cancelled { background: var(--danger-soft); color: var(--danger); box-shadow: 0 0 0 1px rgb(255 128 128 / 25%) inset; }
+.status-cancelled { background: var(--danger-soft); color: var(--danger); }
 
 .toast {
   position: fixed;
@@ -209,12 +216,12 @@ a:focus-visible,
   bottom: calc(96px + var(--safe-bottom));
   transform: translateX(-50%);
   max-width: calc(100% - 32px);
-  padding: 0.75rem 1.2rem;
+  padding: 0.7rem 1.15rem;
   border-radius: 999px;
-  background: #f6efe4;
-  color: #16131c;
-  font-weight: 700;
-  box-shadow: 0 12px 30px rgb(0 0 0 / 50%);
+  background: #1b2130;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
   z-index: 100;
 }
 
@@ -229,12 +236,6 @@ a:focus-visible,
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
-}
-
-/* Gold hairline divider used by headers and sheets */
-.gold-rule {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgb(229 180 88 / 45%), transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

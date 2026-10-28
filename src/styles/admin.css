@@ -11,11 +11,9 @@ body {
   justify-content: space-between;
   gap: 0.75rem;
   padding: calc(0.6rem + var(--safe-top)) 16px 0.6rem;
-  background: rgb(12 10 16 / 85%);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text);
+  background: var(--brand-deep);
+  box-shadow: 0 2px 10px rgb(16 24 40 / 18%);
+  color: #fff;
 }
 .a-brand {
   display: flex;
@@ -24,24 +22,18 @@ body {
 }
 .a-brand img {
   border-radius: 10px;
-  box-shadow: 0 0 0 1px var(--hairline);
+  background: #fff;
 }
 .a-brand strong {
   display: block;
   font-family: var(--font-display);
-  font-size: 1.2rem;
-  line-height: 1.1;
-  background: var(--gold-grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  font-size: 1.15rem;
+  line-height: 1.15;
 }
 .a-brand small {
-  color: var(--muted);
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 0.72rem;
+  font-weight: 500;
+  opacity: 0.85;
 }
 .a-top-right {
   display: flex;
@@ -55,15 +47,13 @@ body {
 .pill {
   padding: 0.25rem 0.7rem;
   border-radius: 999px;
-  background: rgb(255 255 255 / 6%);
-  box-shadow: 0 0 0 1px var(--border) inset;
+  background: rgb(255 255 255 / 16%);
   font-size: 0.8rem;
   font-weight: 600;
   white-space: nowrap;
 }
 .pill.on {
-  background: var(--success-soft);
-  box-shadow: 0 0 0 1px rgb(111 220 165 / 35%) inset;
+  background: #fff;
   color: var(--success);
 }
 
@@ -519,13 +509,12 @@ code {
   padding: 0;
   border: 0;
   border-radius: 24px 24px 0 0;
-  background: #121017;
+  background: var(--bg);
   color: var(--text);
-  box-shadow: 0 0 0 1px var(--hairline), 0 -20px 60px rgb(0 0 0 / 60%);
+  box-shadow: var(--shadow-lg);
 }
 .a-dialog::backdrop {
-  background: rgb(5 3 8 / 70%);
-  backdrop-filter: blur(3px);
+  background: rgb(16 24 40 / 45%);
 }
 @media (min-width: 640px) {
   .a-dialog {
@@ -543,9 +532,8 @@ code {
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.85rem 16px 0.6rem;
-  background: rgb(18 16 23 / 94%);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--hairline);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 .d-head h2 {
   margin: 0;
@@ -934,4 +922,25 @@ code {
 .a-tab[aria-selected='true'] .count {
   background: var(--brand-ink);
   color: var(--gold-ink);
+}
+.a-brand {
+  min-width: 0;
+}
+.a-brand > span {
+  min-width: 0;
+  overflow: hidden;
+}
+@media (max-width: 420px) {
+  .a-top-right {
+    gap: 0.35rem;
+  }
+  .pill {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.72rem;
+  }
+  .a-top-right .btn {
+    min-height: 32px;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.8rem;
+  }
 }
