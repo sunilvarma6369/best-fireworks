@@ -72,12 +72,16 @@ Without the secret, the workflow still builds everything (the APK is under the r
 
 Manual deploy from this PC: `npm run deploy`. It keeps the APK that is currently live, because the APK is only built on GitHub.
 
-### 5. Android APK from GitHub
-The APK is published on the website. Share either link:
-- **https://bestfireworks.web.app/app** (short link)
-- https://bestfireworks.web.app/download/BestFireWorks.apk
+### 5. Android APK (built on GitHub, shared from Google Drive)
+Every push to `main` builds a signed **BestFireWorks.apk**. Firebase's free Spark plan does not allow hosting `.apk` files, so the app is shared from Google Drive behind our own short link, **https://bestfireworks.web.app/app**.
 
-The "⬇ Android app" button on the website appears automatically once a build is live.
+**First time**
+1. GitHub → **Actions** → the latest **Build and deploy** run → **Artifacts** → download **BestFireWorks-apk-v…** and unzip it.
+2. Upload `BestFireWorks.apk` to Google Drive → **Share** → General access: **Anyone with the link** (Viewer) → **Copy link**.
+3. Put the file ID from that link into the `/app` redirect in `firebase.json` (`https://drive.google.com/uc?export=download&id=<FILE_ID>`) and set `APK_URL = '/app'` in `src/config.js`. The website then shows the "⬇ Android app" button.
+
+**Updating the app later** (only needed for app changes; prices and items update without a new app)
+- Download the new artifact, then in Drive right-click the existing file → **File information → Manage versions → Upload new version**. The link stays the same, so nothing else changes.
 
 **Set up a signing key once.** Without one, each build is signed with a new throwaway key, and phones must uninstall the old app before installing an update.
 

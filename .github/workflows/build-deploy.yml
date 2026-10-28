@@ -1,7 +1,8 @@
 name: Build and deploy
 
-# Every push to main builds the website and the Android APK, puts the APK on the website at
-# /download/BestFireWorks.apk (short link: /app) and deploys both to Firebase Hosting together.
+# Every push to main builds the website and the signed Android APK, and deploys the website to Firebase Hosting.
+# The APK is kept as a run artifact (Actions → run → Artifacts). Firebase's free Spark plan does not allow hosting
+# .apk files, so the shop uploads it to Google Drive and bestfireworks.web.app/app redirects there (firebase.json).
 on:
   push:
     branches: [main]
@@ -83,19 +84,14 @@ jobs:
           rm -f release.jks
 
       # Added after `cap sync`, so the APK is served by the website but not packed inside itself.
-      - name: Put the APK on the website
-        run: |
-          mkdir -p dist/download
-          cp BestFireWorks.apk dist/download/BestFireWorks.apk
-
-      # Private copy for the repo owner (Actions tab → run → Artifacts). Not shown to customers.
+      # Download from the run page, then upload to Google Drive (README step 5). Not shown to customers.
       - uses: actions/upload-artifact@v4
         with:
-          name: BestFireWorks-apk
+          name: BestFireWorks-apk-v${{ github.run_number }}
           path: BestFireWorks.apk
           retention-days: 30
 
-      # ── Deploy website + APK ───────────────────────────────────────────────────
+      # ── Deploy website ─────────────────────────────────────────────────────────
       - name: Firebase deploy key missing
         if: env.HAS_FIREBASE_KEY != 'true'
         run: echo "::warning::FIREBASE_SERVICE_ACCOUNT secret not set, so nothing was deployed. See README step 4."

@@ -13,7 +13,7 @@
     "test:e2e": "node scripts/e2e-emulator.mjs",
     "build": "npm run prices && vite build",
     "preview": "vite preview",
-    "deploy": "node scripts/deploy-local.mjs",
+    "deploy": "npm run build && firebase deploy --only hosting,firestore",
     "deploy:rules": "firebase deploy --only firestore",
     "deploy:functions": "npm --prefix functions install && firebase deploy --only functions"
   },
