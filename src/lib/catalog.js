@@ -23,6 +23,60 @@ export async function loadPriceList() {
   return fetchJson('/data/price-list.json', 15000);
 }
 
+const round2 = (n) => Math.round(n * 100) / 100;
+const num = (v) => (v === '' || v == null ? null : Number(v));
+
+function withPrices(p) {
+  const finalPrice = round2(Number(p.finalPrice));
+  const amount = round2(Math.max(Number(p.amount ?? finalPrice) || finalPrice, finalPrice));
+  const discount = round2(amount - finalPrice);
+  return { ...p, amount, finalPrice, discount, discountPercent: amount ? round2((discount / amount) * 100) : 0 };
+}
+
+/**
+ * Applies the shop's edits from the admin page (settings/public.catalog) on top of the price-list file.
+ * overrides = { [productId]: { name?, brand?, pcsPerBox?, amount?, finalPrice?, bulkOfferEligible?, hidden?,
+ *                              custom?: true, categoryId?, createdAt? } }
+ * Edited items keep their place; hidden items disappear; custom (shop-added) items go at the end of their category.
+ */
+export function applyCatalogOverrides(data, overrides = {}) {
+  if (!overrides || !Object.keys(overrides).length) return data;
+  const categoriesById = new Map(data.categories.map((c) => [c.id, c]));
+  const valid = (o) => o && Number(o.finalPrice ?? 1) > 0;
+  const products = [];
+
+  for (const p of data.products) {
+    const o = overrides[p.id];
+    if (!o || !valid(o)) { products.push(p); continue; }
+    if (o.hidden) continue;
+    products.push(withPrices({
+      ...p,
+      ...(o.name ? { name: o.name } : {}),
+      ...('brand' in o ? { brand: o.brand || null } : {}),
+      ...('pcsPerBox' in o ? { pcsPerBox: num(o.pcsPerBox) } : {}),
+      ...(o.amount != null ? { amount: o.amount } : {}),
+      ...(o.finalPrice != null ? { finalPrice: o.finalPrice } : {}),
+      ...('bulkOfferEligible' in o ? { bulkOfferEligible: !!o.bulkOfferEligible } : {}),
+      edited: true,
+    }));
+  }
+
+  const added = Object.entries(overrides)
+    .filter(([, o]) => o?.custom && !o.hidden && valid(o) && o.name && categoriesById.has(o.categoryId))
+    .sort(([, a], [, b]) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')));
+  for (const [id, o] of added) {
+    const cat = categoriesById.get(o.categoryId);
+    const lastNo = Math.max(0, ...products.filter((p) => p.section === cat.section).map((p) => p.listNo));
+    products.push(withPrices({
+      id, sku: id, listNo: lastNo + 1, section: cat.section, categoryId: cat.id, category: cat.name,
+      name: o.name, brand: o.brand || null, box: 1, pcsPerBox: num(o.pcsPerBox),
+      amount: o.amount, finalPrice: o.finalPrice, bulkOfferEligible: o.bulkOfferEligible !== false,
+      currency: 'INR', active: true, custom: true,
+    }));
+  }
+  return { ...data, products };
+}
+
 export function indexPriceList(data) {
   const productsById = new Map(data.products.map((p) => [p.id, p]));
   const offer = data.offers?.find((o) => o.id === 'BULK10') ?? data.offers?.[0];

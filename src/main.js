@@ -1,6 +1,7 @@
 import { APK_URL, ORDER_OPTIONS, SITE_URL } from './config.js';
 import {
-  categoryIcon, escapeHtml, extTarget, indexPriceList, isNativeApp, loadPriceList, prettyPhone, telLink, waLink,
+  applyCatalogOverrides, categoryIcon, escapeHtml, extTarget, indexPriceList, isNativeApp, loadPriceList, prettyPhone,
+  telLink, waLink,
 } from './lib/catalog.js';
 import { cleanCodeInput, normalizeOrderCode } from './lib/codes.js';
 import { formatDate, formatPaise, formatRupees, todayIST } from './lib/money.js';
@@ -550,7 +551,8 @@ async function init() {
   setupUi();
   try {
     const [priceList, settings] = await Promise.all([loadPriceList(), fetchPublicSettings()]);
-    state.data = indexPriceList(priceList);
+    // Prices/items edited on the admin page override the price-list file.
+    state.data = indexPriceList(applyCatalogOverrides(priceList, settings.catalog));
     state.settings = { ...state.settings, ...settings };
     state.soldOut = new Set(state.settings.soldOut ?? []);
   } catch (err) {

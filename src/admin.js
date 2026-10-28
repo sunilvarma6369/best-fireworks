@@ -2,13 +2,15 @@ import {
   connectAuthEmulator, getAuth, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signOut,
 } from 'firebase/auth';
 import {
-  arrayRemove, arrayUnion, collection, connectFirestoreEmulator, doc, getDoc, getFirestore, limit, onSnapshot, orderBy,
-  query, serverTimestamp, setDoc, Timestamp, writeBatch,
+  arrayRemove, arrayUnion, collection, connectFirestoreEmulator, deleteField, doc, FieldPath, getDoc, getFirestore, limit,
+  onSnapshot, orderBy, query, serverTimestamp, setDoc, Timestamp, writeBatch,
 } from 'firebase/firestore';
 import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 import { SITE_URL, vapidKey } from './config.js';
-import { escapeHtml, indexPriceList, loadPriceList, prettyPhone, telLink, waLink } from './lib/catalog.js';
-import { cleanCodeInput, normalizeOrderCode } from './lib/codes.js';
+import {
+  applyCatalogOverrides, escapeHtml, indexPriceList, loadPriceList, prettyPhone, telLink, waLink,
+} from './lib/catalog.js';
+import { cleanCodeInput, newOrderCode, normalizeOrderCode } from './lib/codes.js';
 import { app, EMULATOR_HOST, useEmulators } from './lib/firebase-app.js';
 import { formatDate, formatDateTime, formatPaise, formatRupees, toPaise } from './lib/money.js';
 import { computeTotals } from './lib/pricing.js';
@@ -27,7 +29,8 @@ const prefs = { sound: true, repeat: true, wake: false, ...readJson(PREFS_KEY) }
 
 const state = {
   user: null,
-  catalog: null,
+  base: null, // price-list file as loaded
+  catalog: null, // base + the shop's edits (what customers see), indexed
   orders: new Map(),
   settings: { soldOut: [], ordersOpen: true, notice: '' },
   filter: 'active',
@@ -130,9 +133,10 @@ function setupAuth() {
 
 // ── App ──────────────────────────────────────────────────
 async function startApp() {
-  if (!state.catalog) {
+  if (!state.base) {
     try {
-      state.catalog = indexPriceList(await loadPriceList());
+      state.base = await loadPriceList();
+      rebuildCatalog();
     } catch {
       toast('Could not load the price list. Price checks are off.');
     }
@@ -168,7 +172,8 @@ async function startApp() {
 
   unsubs.push(
     onSnapshot(doc(db, 'settings', 'public'), (snap) => {
-      state.settings = { soldOut: [], ordersOpen: true, notice: '', ...(snap.data() ?? {}) };
+      state.settings = { soldOut: [], ordersOpen: true, notice: '', catalog: {}, ...(snap.data() ?? {}) };
+      rebuildCatalog();
       fillSettingsForm();
       renderProducts();
     }),
@@ -504,31 +509,151 @@ function exportCsv() {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
-// ── Sold out ─────────────────────────────────────────────
+// ── Items & prices ───────────────────────────────────────
+// Edits live in settings/public.catalog = { [productId]: override } (see applyCatalogOverrides). The price-list
+// file is never changed, so "Back to original" just deletes the override.
+const round2 = (n) => Math.round(n * 100) / 100;
+const overrides = () => state.settings.catalog ?? {};
+
+function rebuildCatalog() {
+  if (state.base) state.catalog = indexPriceList(applyCatalogOverrides(state.base, overrides()));
+}
+
+/** Every item the shop can edit, including hidden ones, with the shop's edits applied. */
+function editorItems() {
+  const ov = overrides();
+  const shown = Object.fromEntries(Object.entries(ov).map(([id, o]) => [id, { ...o, hidden: false }]));
+  return applyCatalogOverrides(state.base, shown).products.map((p) => ({ ...p, hidden: !!ov[p.id]?.hidden, edited: !!ov[p.id] }));
+}
+
 function renderProducts() {
-  if (!state.catalog) return;
+  if (!state.base) return;
   const out = new Set(state.settings.soldOut ?? []);
   const q = state.productSearch.toLowerCase();
-  const { categories, products, sections } = state.catalog;
+  const items = editorItems();
+  const { categories, sections } = state.base;
   let html = '';
   for (const section of sections) {
     for (const cat of categories.filter((c) => c.section === section.id)) {
-      const list = products.filter(
+      const list = items.filter(
         (p) => p.categoryId === cat.id && (!q || `${p.name} ${p.brand ?? ''}`.toLowerCase().includes(q)),
       );
       if (!list.length) continue;
-      html += `<div class="p-group"><h3>${escapeHtml(section.id === 'standard' ? section.name : `${cat.name}`)}</h3>
-        ${list.map((p) => `<label class="p-row${out.has(p.id) ? ' is-out' : ''}">
-            <input type="checkbox" data-id="${p.id}" ${out.has(p.id) ? 'checked' : ''} />
-            <span class="p-name">${p.listNo}. ${escapeHtml(p.name)} <small>${escapeHtml(p.brand ?? '')}</small></span>
-            <small>${formatRupees(p.finalPrice)}</small>
-          </label>`).join('')}</div>`;
+      html += `<div class="p-group"><h3>${escapeHtml(section.id === 'standard' ? section.name : cat.name)}</h3>
+        ${list.map((p) => `<div class="p-row${out.has(p.id) ? ' is-out' : ''}${p.hidden ? ' is-hidden' : ''}">
+            <label class="sold-toggle"><input type="checkbox" data-id="${p.id}" ${out.has(p.id) ? 'checked' : ''} />Sold out</label>
+            <span class="p-name">${p.listNo}. ${escapeHtml(p.name)} <small>${escapeHtml(p.brand ?? '')}</small>
+              ${p.custom ? '<small class="tag-edit">added</small>' : p.edited ? '<small class="tag-edit">edited</small>' : ''}
+              ${p.hidden ? '<small class="tag-hidden">hidden</small>' : ''}</span>
+            <span class="p-price">${formatRupees(p.finalPrice)}${p.amount > p.finalPrice ? `<s>${formatRupees(p.amount)}</s>` : ''}</span>
+            <button type="button" class="btn btn-sm btn-soft edit-btn" data-edit="${p.id}">Edit</button>
+          </div>`).join('')}</div>`;
     }
   }
   const outCount = out.size;
+  const editCount = Object.keys(overrides()).length;
   $('#product-list').innerHTML =
     (outCount ? `<p class="warn">${outCount} item${outCount > 1 ? 's' : ''} marked sold out.</p>` : '') +
+    (editCount ? `<p class="hint">${editCount} item${editCount > 1 ? 's' : ''} changed from the original price list.</p>` : '') +
     (html || '<p class="muted">No items match.</p>');
+}
+
+let editingId = null; // null = adding a new item
+
+function showDiscount() {
+  const f = $('#item-form');
+  const amount = Number(f.amount.value) || 0;
+  const fin = Number(f.finalPrice.value) || 0;
+  const el = $('#item-discount');
+  if (fin > 0 && amount > fin) el.textContent = `Customer saves ${formatRupees(round2(amount - fin))} (${Math.round(((amount - fin) / amount) * 100)}% off)`;
+  else el.textContent = fin > 0 ? 'No discount shown for this item.' : '';
+}
+
+function openItemEditor(id) {
+  editingId = id;
+  const f = $('#item-form');
+  const item = id ? editorItems().find((p) => p.id === id) : null;
+  const original = id ? state.base.products.find((p) => p.id === id) : null;
+  const isCustom = !id || item?.custom;
+
+  $('#item-title').textContent = id ? 'Edit item' : 'Add item';
+  $('#item-original').textContent = original
+    ? `Original price list: ${original.name} · ${original.brand ?? '—'} · ${formatRupees(original.finalPrice)} (amount ${formatRupees(original.amount)})`
+    : isCustom && id ? 'Item added by the shop.' : 'New item. It appears at the end of the chosen category.';
+  $('#item-category-field').hidden = !isCustom;
+  f.categoryId.innerHTML = state.base.categories
+    .map((c) => `<option value="${c.id}">${c.section === 'standard' ? 'Standard' : 'Other Brands'} · ${escapeHtml(c.name)}</option>`)
+    .join('');
+  f.categoryId.value = item?.categoryId ?? state.base.categories.find((c) => c.section === 'others')?.id;
+  f.name.value = item?.name ?? '';
+  f.brand.value = item?.brand ?? '';
+  f.pcsPerBox.value = item?.pcsPerBox ?? '';
+  f.amount.value = item?.amount ?? '';
+  f.finalPrice.value = item?.finalPrice ?? '';
+  f.bulkOfferEligible.checked = item ? !!item.bulkOfferEligible : true;
+  f.hidden.checked = !!item?.hidden;
+  $('#item-reset').hidden = !(id && original && overrides()[id]);
+  $('#item-delete').hidden = !(id && item?.custom);
+  $('#item-error').hidden = true;
+  showDiscount();
+  $('#item-dialog').showModal();
+}
+
+function saveCatalogEntry(id, value) {
+  // mergeFields replaces just this one item's entry (creating settings/public if needed).
+  return setDoc(doc(db, 'settings', 'public'), { catalog: { [id]: value } }, { mergeFields: [new FieldPath('catalog', id)] });
+}
+const removeCatalogEntry = (id) => setDoc(doc(db, 'settings', 'public'), { catalog: { [id]: deleteField() } }, { merge: true });
+
+async function submitItem(e) {
+  e.preventDefault();
+  const f = e.target;
+  const err = $('#item-error');
+  const fail = (msg, field) => {
+    err.textContent = msg;
+    err.hidden = false;
+    field?.focus();
+  };
+  const name = f.name.value.trim().replace(/\s+/g, ' ').toUpperCase();
+  const brand = f.brand.value.trim().toUpperCase();
+  const pcs = f.pcsPerBox.value === '' ? null : Number(f.pcsPerBox.value);
+  const finalPrice = round2(Number(f.finalPrice.value));
+  const amount = f.amount.value === '' ? finalPrice : round2(Number(f.amount.value));
+  if (name.length < 2) return fail('Enter the item name.', f.name);
+  if (pcs != null && !(Number.isInteger(pcs) && pcs >= 1)) return fail('Pieces per box must be a whole number (1 or more).', f.pcsPerBox);
+  if (!(finalPrice > 0)) return fail('Enter the final price the customer pays.', f.finalPrice);
+  if (amount < finalPrice) return fail('Amount (before discount) cannot be less than the final price.', f.amount);
+
+  const meta = { updatedBy: state.user.email ?? '', updatedAt: serverTimestamp() };
+  const fields = { name, brand, pcsPerBox: pcs, amount, finalPrice, bulkOfferEligible: f.bulkOfferEligible.checked };
+  const existing = editingId ? overrides()[editingId] : null;
+  const original = editingId ? state.base.products.find((p) => p.id === editingId) : null;
+  let id = editingId;
+  let value;
+
+  if (original) {
+    // Store only what differs from the price-list file.
+    value = {};
+    for (const [k, v] of Object.entries(fields)) if ((original[k] ?? (k === 'brand' ? '' : null)) !== v) value[k] = v;
+    if (f.hidden.checked) value.hidden = true;
+    if (!Object.keys(value).length) {
+      await removeCatalogEntry(id).catch((ex) => fail(`Could not save: ${ex.message}`));
+      if (err.hidden) { $('#item-dialog').close(); toast('Item matches the original price list'); }
+      return;
+    }
+    Object.assign(value, meta);
+  } else {
+    id ??= `ADD-${newOrderCode().slice(4)}`;
+    value = { ...fields, custom: true, categoryId: f.categoryId.value, hidden: f.hidden.checked,
+      createdAt: existing?.createdAt ?? new Date().toISOString(), ...meta };
+  }
+  try {
+    await saveCatalogEntry(id, value);
+    $('#item-dialog').close();
+    toast(editingId ? 'Item updated on the website and app' : 'Item added to the price list');
+  } catch (ex) {
+    fail(`Could not save: ${ex.message}`);
+  }
 }
 
 function setupProductUi() {
@@ -542,6 +667,38 @@ function setupProductUi() {
     setDoc(doc(db, 'settings', 'public'), { soldOut: e.target.checked ? arrayUnion(id) : arrayRemove(id) }, { merge: true })
       .then(() => toast(e.target.checked ? 'Marked sold out' : 'Back in stock'))
       .catch((err) => toast(`Could not save: ${err.message}`));
+  });
+  $('#product-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-edit]');
+    if (b) openItemEditor(b.dataset.edit);
+  });
+  $('#add-item').addEventListener('click', () => state.base && openItemEditor(null));
+
+  const f = $('#item-form');
+  f.addEventListener('submit', submitItem);
+  f.addEventListener('input', (e) => ['amount', 'finalPrice'].includes(e.target.name) && showDiscount());
+  const dlg = $('#item-dialog');
+  dlg.addEventListener('click', async (e) => {
+    if (e.target === dlg || e.target.closest('[data-act="close"]')) return dlg.close();
+    const off = e.target.closest('[data-off]');
+    if (off) {
+      const pct = Number(off.dataset.off);
+      const amount = Number(f.amount.value);
+      const fin = Number(f.finalPrice.value);
+      if (amount > 0) f.finalPrice.value = round2(amount * (1 - pct / 100));
+      else if (fin > 0) f.amount.value = pct ? round2(fin / (1 - pct / 100)) : fin;
+      return showDiscount();
+    }
+    if (e.target.closest('[data-act="reset"]')) {
+      if (!confirm('Undo all changes to this item and use the original price list?')) return;
+      await removeCatalogEntry(editingId).then(() => { dlg.close(); toast('Back to the original price list'); })
+        .catch((ex) => toast(`Could not save: ${ex.message}`));
+    }
+    if (e.target.closest('[data-act="delete"]')) {
+      if (!confirm('Delete this item from the price list?')) return;
+      await removeCatalogEntry(editingId).then(() => { dlg.close(); toast('Item deleted'); })
+        .catch((ex) => toast(`Could not save: ${ex.message}`));
+    }
   });
 }
 

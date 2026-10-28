@@ -72,7 +72,7 @@
 
       <nav class="a-tabs" role="tablist">
         <button class="a-tab" role="tab" data-tab="orders" aria-selected="true">Orders <span class="count" id="new-count" hidden></span></button>
-        <button class="a-tab" role="tab" data-tab="products" aria-selected="false">Sold out</button>
+        <button class="a-tab" role="tab" data-tab="products" aria-selected="false">Items &amp; prices</button>
         <button class="a-tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
       </nav>
 
@@ -93,8 +93,11 @@
       </div>
 
       <div class="a-panel" id="tab-products" hidden>
-        <p class="muted">Tick an item to show it as <strong>Sold out</strong> on the website and app. Customers cannot order it until you untick it.</p>
-        <input type="search" id="product-search" placeholder="Search items" />
+        <p class="muted">Tap <strong>Edit</strong> to change an item's name or price, or to hide it. Tick <strong>Sold out</strong> to stop orders for it until you untick it. Changes show on the website and app straight away.</p>
+        <div class="a-toolbar-row">
+          <input type="search" id="product-search" placeholder="Search items" />
+          <button class="btn btn-sm btn-primary" id="add-item" type="button">+ Add item</button>
+        </div>
         <div id="product-list"></div>
       </div>
 
@@ -120,6 +123,45 @@
 
     <dialog class="a-dialog" id="order-dialog" aria-label="Order details">
       <div id="order-detail"></div>
+    </dialog>
+
+    <dialog class="a-dialog" id="item-dialog" aria-labelledby="item-title">
+      <form id="item-form" novalidate>
+        <div class="d-head">
+          <h2 id="item-title">Edit item</h2>
+          <button class="close" type="button" data-act="close" aria-label="Close">✕</button>
+        </div>
+        <div class="d-body a-form">
+          <p class="o-sub" id="item-original"></p>
+          <label id="item-category-field">Category
+            <select name="categoryId"></select>
+          </label>
+          <label>Item name <input name="name" maxlength="80" required autocomplete="off" /></label>
+          <div class="two-col">
+            <label>Brand <input name="brand" maxlength="40" autocomplete="off" /></label>
+            <label>Pieces per box <input name="pcsPerBox" type="number" inputmode="numeric" min="1" step="1" /></label>
+          </div>
+          <div class="two-col">
+            <label>Amount ₹ <small>(before discount)</small><input name="amount" type="number" inputmode="decimal" min="0" step="0.01" /></label>
+            <label>Final price ₹ <small>(customer pays)</small><input name="finalPrice" type="number" inputmode="decimal" min="0.01" step="0.01" required /></label>
+          </div>
+          <div class="quick-off">
+            <span class="o-sub">From amount:</span>
+            <button class="btn btn-sm btn-soft" type="button" data-off="20">20% off</button>
+            <button class="btn btn-sm btn-soft" type="button" data-off="25">25% off</button>
+            <button class="btn btn-sm btn-soft" type="button" data-off="0">No discount</button>
+          </div>
+          <p class="ok" id="item-discount"></p>
+          <label class="switch"><input type="checkbox" name="bulkOfferEligible" /> Extra 10% bulk offer applies to this item</label>
+          <label class="switch"><input type="checkbox" name="hidden" /> Hide this item from the price list</label>
+          <p class="a-error" id="item-error" hidden></p>
+          <button class="btn btn-primary" type="submit">Save</button>
+          <div class="d-row-btns">
+            <button class="btn btn-sm btn-soft" type="button" data-act="reset" id="item-reset">↺ Back to original price list</button>
+            <button class="btn btn-sm btn-danger" type="button" data-act="delete" id="item-delete">Delete item</button>
+          </div>
+        </div>
+      </form>
     </dialog>
 
     <div id="print-area"></div>

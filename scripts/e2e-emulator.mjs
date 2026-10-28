@@ -10,7 +10,7 @@ import {
 process.env.BFW_EMULATORS = '1';
 const { placeOrder, fetchTracking, fetchPublicSettings } = await import('../src/lib/orders.js');
 const { computeTotals } = await import('../src/lib/pricing.js');
-const { indexPriceList } = await import('../src/lib/catalog.js');
+const { applyCatalogOverrides, indexPriceList } = await import('../src/lib/catalog.js');
 
 const data = indexPriceList(JSON.parse(readFileSync(new URL('../public/data/price-list.json', import.meta.url), 'utf8')));
 let failures = 0;
@@ -88,6 +88,24 @@ try {
 }
 check(blocked, 'booking is refused while orders are paused');
 await setDoc(doc(shop, 'settings', 'public'), { ordersOpen: true, soldOut: [] }, { merge: true });
+
+// 6. Shop edits prices / adds / hides items from the admin page -> customers see it on next load
+await setDoc(doc(shop, 'settings', 'public'), {
+  catalog: {
+    'OTH-001': { finalPrice: 35, amount: 45 },
+    'OTH-002': { hidden: true },
+    'ADD-TEST2': { custom: true, categoryId: 'oth-sounds', name: 'NEW TEST BOMB', brand: 'TEST', pcsPerBox: 5,
+      amount: 100, finalPrice: 80, bulkOfferEligible: true, createdAt: '2026-10-28T00:00:00Z' },
+  },
+}, { merge: true });
+const seen = indexPriceList(applyCatalogOverrides(JSON.parse(readFileSync(new URL('../public/data/price-list.json', import.meta.url), 'utf8')), (await fetchPublicSettings()).catalog));
+const edited = seen.productsById.get('OTH-001');
+const added = seen.productsById.get('ADD-TEST2');
+check(edited.finalPrice === 35 && edited.discount === 10 && edited.discountPercent === 22.22, 'edited price shows to customers (₹45 → ₹35, 22% off)');
+check(!seen.productsById.has('OTH-002'), 'hidden item is gone from the customer price list');
+check(added?.category === 'Sounds' && added.listNo === 146 && added.finalPrice === 80, `shop-added item appears in Sounds as #${added?.listNo}`);
+check(await denied(() => setDoc(doc(stranger, 'settings', 'public'), { catalog: { 'OTH-001': { finalPrice: 1 } } }, { merge: true })), 'stranger cannot change prices');
+await setDoc(doc(shop, 'settings', 'public'), { catalog: {} }, { mergeFields: ['catalog'] });
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');
 process.exit(failures ? 1 : 0);
