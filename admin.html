@@ -74,6 +74,7 @@
         <button class="a-tab" role="tab" data-tab="orders" aria-selected="true">Orders <span class="count" id="new-count" hidden></span></button>
         <button class="a-tab" role="tab" data-tab="dashboard" aria-selected="false">📊 Sales</button>
         <button class="a-tab" role="tab" data-tab="products" aria-selected="false">Items &amp; prices</button>
+        <button class="a-tab" role="tab" data-tab="pdf" aria-selected="false">📄 Price list PDF</button>
         <button class="a-tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
       </nav>
 
@@ -106,8 +107,36 @@
         <div class="a-toolbar-row">
           <input type="search" id="product-search" placeholder="Search items" />
           <button class="btn btn-sm btn-primary" id="add-item" type="button">+ Add item</button>
+          <button class="btn btn-sm btn-soft" id="go-pdf" type="button">📄 Export PDF</button>
         </div>
         <div id="product-list"></div>
+      </div>
+
+      <div class="a-panel" id="tab-pdf" hidden>
+        <div class="a-card a-form pdf-export">
+          <h2>Export the price list</h2>
+          <p class="muted">Always uses the latest prices and items from <strong>Items &amp; prices</strong>, in your price list design. Your changes below are saved when you export.</p>
+          <div class="pdf-buttons">
+            <button type="button" class="btn btn-primary" data-pdf="all">⬇ Both sections in one PDF</button>
+            <button type="button" class="btn btn-soft" data-pdf="two">⬇ Two separate PDFs</button>
+            <button type="button" class="btn btn-soft" data-pdf="standard">Standard only</button>
+            <button type="button" class="btn btn-soft" data-pdf="others">Other Brands only</button>
+          </div>
+          <label class="switch"><input type="checkbox" id="pdf-hide-soldout" /> Leave out items marked sold out</label>
+          <p class="pdf-status" id="pdf-status" role="status"></p>
+        </div>
+        <form id="pdf-form" autocomplete="off">
+          <div id="pdf-groups"></div>
+          <details class="a-card pdf-group">
+            <summary>Header images</summary>
+            <p class="muted pdf-help">Each picture is separate, so you can swap one without touching the rest. Use a clear image; a PNG with a transparent background looks best.</p>
+            <div id="pdf-images"></div>
+          </details>
+          <div class="pdf-save">
+            <button type="submit" class="btn btn-primary">Save settings</button>
+            <button type="button" class="btn btn-soft" id="pdf-reset">Original wording</button>
+          </div>
+        </form>
       </div>
 
       <div class="a-panel" id="tab-settings" hidden>
@@ -153,11 +182,14 @@
           <div class="photo-field">
             <div class="photo-preview" id="item-photo-preview" aria-hidden="true">No photo</div>
             <div class="photo-actions">
-              <label class="btn btn-sm btn-soft">📷 <span id="item-photo-pick-label">Add photo</span>
+              <label class="btn btn-sm btn-soft">📷 Take photo
+                <input type="file" accept="image/*" capture="environment" id="item-photo-camera" hidden />
+              </label>
+              <label class="btn btn-sm btn-soft">🖼 Gallery
                 <input type="file" accept="image/*" id="item-photo-input" hidden />
               </label>
               <button type="button" class="btn btn-sm btn-soft" data-act="remove-photo" id="item-photo-remove" hidden>Remove</button>
-              <p class="o-sub" id="item-photo-info">Optional. Shrunk to about 10 KB so the price list stays fast.</p>
+              <p class="o-sub" id="item-photo-info">Optional. Compressed so the price list stays fast.</p>
             </div>
           </div>
           <div class="two-col">

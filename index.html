@@ -173,6 +173,19 @@
       </div>
     </dialog>
 
+    <!-- Item photo: tap to zoom -->
+    <dialog class="sheet lightbox" id="photo-sheet" aria-label="Item photo">
+      <button class="close lb-close" type="button" data-close aria-label="Close">✕</button>
+      <div class="lb-stage" id="lb-stage"><img id="lb-img" alt="" /></div>
+      <div class="lb-bar">
+        <div class="lb-info"><strong id="lb-name"></strong><small id="lb-price"></small></div>
+        <div class="lb-zoom">
+          <button type="button" data-lb-zoom="-1" aria-label="Zoom out">−</button>
+          <button type="button" data-lb-zoom="1" aria-label="Zoom in">+</button>
+        </div>
+      </div>
+    </dialog>
+
     <div class="toast" id="toast" role="status" hidden></div>
 
     <script type="module" src="/src/main.js"></script>

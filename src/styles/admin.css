@@ -986,3 +986,88 @@ code {
   border-radius: 6px;
   object-fit: cover;
 }
+
+/* Price list PDF tab */
+.pdf-export h2 {
+  margin: 0;
+}
+.pdf-export > p {
+  margin: 0;
+}
+.pdf-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.5rem;
+}
+.pdf-status {
+  min-height: 1.2em;
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.pdf-group summary {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.02rem;
+  cursor: pointer;
+}
+.pdf-group[open] summary {
+  margin-bottom: 0.7rem;
+}
+.pdf-help {
+  margin: 0 0 0.7rem;
+  font-size: 0.86rem;
+}
+.pdf-date {
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500 !important;
+}
+.pdf-date input {
+  flex: 1;
+  width: auto;
+}
+.pdf-image {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.pdf-image:last-child {
+  border-bottom: 0;
+}
+.pdf-thumb {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 92px;
+  height: 64px;
+  padding: 4px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #4a1596;
+  color: #fff;
+}
+.pdf-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+}
+.pdf-image-body {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.pdf-image-body .muted {
+  font-size: 0.8rem;
+}
+.pdf-save {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+.a-panel .pdf-group {
+  margin: 0.75rem 0;
+}

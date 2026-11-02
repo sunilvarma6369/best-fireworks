@@ -20,6 +20,7 @@ import { computeTotals } from './lib/pricing.js';
 import { computeSales, BASES, RANGES } from './lib/sales.js';
 import { STATUS } from './lib/status.js';
 import { itemSalesCsv, renderChips, renderDashboard } from './dashboard.js';
+import { openPdfTab, setupPdfTab } from './admin-pdf.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const db = app ? getFirestore(app) : null;
@@ -576,16 +577,38 @@ function renderProducts() {
 let editingId = null; // null = adding a new item
 
 // ── Item photo: compressed in the browser before upload ──
-const PHOTO_W = 320;
-const PHOTO_H = 240;
-const PHOTO_MAX_BYTES = 25 * 1024;
-let photoDraft = { blob: null, remove: false, previewUrl: null };
+const PHOTO_CARD = { longest: 400, maxBytes: 25 * 1024 }; // shown on the price list
+const PHOTO_ZOOM = { longest: 1280, maxBytes: 180 * 1024 }; // loaded only when a customer taps the photo
+let photoDraft = { card: null, zoom: null, remove: false, previewUrl: null };
 
 function canvasBlob(canvas, type, quality) {
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
 }
 
-/** Crops to 4:3, scales to 320×240 and encodes WebP (JPEG fallback), lowering quality until it is ≤ 25 KB. */
+/** Scales without cropping and encodes WebP (JPEG fallback), lowering quality until it fits maxBytes. */
+async function encodePhoto(img, { longest, maxBytes }) {
+  const sw = img.width, sh = img.height;
+  const scale = Math.min(1, longest / Math.max(sw, sh));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(sw * scale);
+  canvas.height = Math.round(sh * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  let best = null;
+  for (const type of ['image/webp', 'image/jpeg']) {
+    for (const q of [0.72, 0.62, 0.5, 0.4, 0.3, 0.22]) {
+      const blob = await canvasBlob(canvas, type, q);
+      if (!blob || blob.type !== type) break; // this browser can't encode the type
+      best = blob;
+      if (blob.size <= maxBytes) return blob;
+    }
+    if (best) return best;
+  }
+  throw new Error('This phone could not process the photo.');
+}
+
 async function compressPhoto(file) {
   const img = await createImageBitmap(file).catch(async () => {
     const el = new Image();
@@ -593,40 +616,19 @@ async function compressPhoto(file) {
     await el.decode();
     return el;
   });
-  const sw = img.width, sh = img.height;
-  const scale = Math.max(PHOTO_W / sw, PHOTO_H / sh);
-  const cw = PHOTO_W / scale, ch = PHOTO_H / scale;
-  const canvas = document.createElement('canvas');
-  canvas.width = PHOTO_W;
-  canvas.height = PHOTO_H;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, PHOTO_W, PHOTO_H);
-  ctx.drawImage(img, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, PHOTO_W, PHOTO_H);
-  let best = null;
-  for (const type of ['image/webp', 'image/jpeg']) {
-    for (const q of [0.62, 0.5, 0.4, 0.3, 0.22]) {
-      const blob = await canvasBlob(canvas, type, q);
-      if (!blob || blob.type !== type) break; // this browser can't encode the type
-      best = blob;
-      if (blob.size <= PHOTO_MAX_BYTES) return blob;
-    }
-    if (best) return best;
-  }
-  throw new Error('This phone could not process the photo.');
+  return { card: await encodePhoto(img, PHOTO_CARD), zoom: await encodePhoto(img, PHOTO_ZOOM) };
 }
 
 function showPhoto(url, info) {
   const box = $('#item-photo-preview');
   box.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="" />` : 'No photo';
   $('#item-photo-remove').hidden = !url;
-  $('#item-photo-pick-label').textContent = url ? 'Change photo' : 'Add photo';
   $('#item-photo-info').textContent = info;
 }
 
-async function uploadPhoto(id, blob) {
+async function uploadPhoto(id, blob, suffix = '') {
   const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
-  const r = storageRef(storage, `products/${id}-${Date.now()}.${ext}`);
+  const r = storageRef(storage, `products/${id}-${Date.now()}${suffix}.${ext}`);
   await uploadBytes(r, blob, { contentType: blob.type, cacheControl: 'public, max-age=31536000, immutable' });
   return getDownloadURL(r);
 }
@@ -668,8 +670,8 @@ function openItemEditor(id) {
   f.bulkOfferEligible.checked = item ? !!item.bulkOfferEligible : true;
   f.hidden.checked = !!item?.hidden;
   if (photoDraft.previewUrl) URL.revokeObjectURL(photoDraft.previewUrl);
-  photoDraft = { blob: null, remove: false, previewUrl: null };
-  showPhoto(item?.image ?? null, item?.image ? 'Photo shown on the price list.' : 'Optional. Shrunk to about 10 KB so the price list stays fast.');
+  photoDraft = { card: null, zoom: null, remove: false, previewUrl: null };
+  showPhoto(item?.image ?? null, item?.image ? 'Photo shown on the price list.' : 'Optional. Compressed so the price list stays fast.');
   $('#item-reset').hidden = !(id && original && overrides()[id]);
   $('#item-delete').hidden = !(id && item?.custom);
   $('#item-error').hidden = true;
@@ -711,13 +713,16 @@ async function submitItem(e) {
 
   // Photo: upload the new one (if picked), keep the current one, or drop it.
   const oldImage = existing?.image ?? null;
+  const oldZoom = existing?.imageFull ?? null;
   let image = photoDraft.remove ? null : oldImage;
-  if (photoDraft.blob) {
+  let imageFull = photoDraft.remove ? null : oldZoom;
+  if (photoDraft.card) {
     const saveBtn = f.querySelector('button[type=submit]');
     saveBtn.disabled = true;
     saveBtn.textContent = 'Uploading photo…';
     try {
-      image = await uploadPhoto(id, photoDraft.blob);
+      image = await uploadPhoto(id, photoDraft.card);
+      imageFull = await uploadPhoto(id, photoDraft.zoom, '-full');
     } catch (ex) {
       return fail(`Photo upload failed: ${ex.message}`);
     } finally {
@@ -726,6 +731,7 @@ async function submitItem(e) {
     }
   }
   if (image) fields.image = image;
+  if (imageFull) fields.imageFull = imageFull;
 
   if (original) {
     // Store only what differs from the price-list file.
@@ -734,7 +740,7 @@ async function submitItem(e) {
     if (f.hidden.checked) value.hidden = true;
     if (!Object.keys(value).length) {
       await removeCatalogEntry(id).catch((ex) => fail(`Could not save: ${ex.message}`));
-      if (err.hidden) { deleteOldPhoto(oldImage); $('#item-dialog').close(); toast('Item matches the original price list'); }
+      if (err.hidden) { deleteOldPhoto(oldImage); deleteOldPhoto(oldZoom); $('#item-dialog').close(); toast('Item matches the original price list'); }
       return;
     }
     Object.assign(value, meta);
@@ -745,6 +751,7 @@ async function submitItem(e) {
   try {
     await saveCatalogEntry(id, value);
     if (oldImage && oldImage !== image) deleteOldPhoto(oldImage);
+    if (oldZoom && oldZoom !== imageFull) deleteOldPhoto(oldZoom);
     $('#item-dialog').close();
     toast(editingId ? 'Item updated on the website and app' : 'Item added to the price list');
   } catch (ex) {
@@ -772,20 +779,22 @@ function setupProductUi() {
 
   const f = $('#item-form');
   f.addEventListener('submit', submitItem);
-  $('#item-photo-input').addEventListener('change', async (e) => {
+  const onPhotoPicked = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
     $('#item-photo-info').textContent = 'Compressing…';
     try {
-      const blob = await compressPhoto(file);
+      const { card, zoom } = await compressPhoto(file);
       if (photoDraft.previewUrl) URL.revokeObjectURL(photoDraft.previewUrl);
-      photoDraft = { blob, remove: false, previewUrl: URL.createObjectURL(blob) };
-      showPhoto(photoDraft.previewUrl, `Ready: ${(blob.size / 1024).toFixed(1)} KB (from ${(file.size / 1024).toFixed(0)} KB). Tap Save to upload.`);
+      photoDraft = { card, zoom, remove: false, previewUrl: URL.createObjectURL(card) };
+      showPhoto(photoDraft.previewUrl, `Ready: ${(card.size / 1024).toFixed(0)} KB for the list, ${(zoom.size / 1024).toFixed(0)} KB for zoom (from ${(file.size / 1024).toFixed(0)} KB). Tap Save to upload.`);
     } catch (ex) {
       $('#item-photo-info').textContent = ex.message;
     }
-  });
+  };
+  $('#item-photo-input').addEventListener('change', onPhotoPicked);
+  $('#item-photo-camera').addEventListener('change', onPhotoPicked);
   f.addEventListener('input', (e) => ['amount', 'finalPrice'].includes(e.target.name) && showDiscount());
   const dlg = $('#item-dialog');
   dlg.addEventListener('click', async (e) => {
@@ -800,7 +809,7 @@ function setupProductUi() {
       return showDiscount();
     }
     if (e.target.closest('[data-act="remove-photo"]')) {
-      photoDraft = { blob: null, remove: true, previewUrl: null };
+      photoDraft = { card: null, zoom: null, remove: true, previewUrl: null };
       return showPhoto(null, 'Photo will be removed when you tap Save.');
     }
     if (e.target.closest('[data-act="reset"]')) {
@@ -1129,8 +1138,9 @@ function setupAlerts() {
 document.querySelectorAll('.a-tab').forEach((tab) =>
   tab.addEventListener('click', () => {
     document.querySelectorAll('.a-tab').forEach((t) => t.setAttribute('aria-selected', String(t === tab)));
-    for (const id of ['orders', 'dashboard', 'products', 'settings']) $(`#tab-${id}`).hidden = id !== tab.dataset.tab;
+    for (const id of ['orders', 'dashboard', 'products', 'pdf', 'settings']) $(`#tab-${id}`).hidden = id !== tab.dataset.tab;
     if (tab.dataset.tab === 'dashboard') renderDash();
+    if (tab.dataset.tab === 'pdf') openPdfTab();
   }),
 );
 
@@ -1142,5 +1152,7 @@ if (!app) {
   setupProductUi();
   setupDashboardUi();
   setupSettingsUi();
+  setupPdfTab({ db, toast, getCatalog: () => state.catalog, getSoldOut: () => state.settings.soldOut ?? [] });
+  $('#go-pdf').addEventListener('click', () => $('.a-tab[data-tab="pdf"]').click());
   setupAuth();
 }

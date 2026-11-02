@@ -65,6 +65,7 @@ export function applyCatalogOverrides(data, overrides = {}) {
       ...(o.finalPrice != null ? { finalPrice: o.finalPrice } : {}),
       ...('bulkOfferEligible' in o ? { bulkOfferEligible: !!o.bulkOfferEligible } : {}),
       ...(photo(o.image) ? { image: photo(o.image) } : {}),
+      ...(photo(o.imageFull) ? { imageFull: photo(o.imageFull) } : {}),
       edited: true,
     }));
   }
@@ -80,6 +81,7 @@ export function applyCatalogOverrides(data, overrides = {}) {
       name: o.name, brand: o.brand || null, box: 1, pcsPerBox: num(o.pcsPerBox),
       amount: o.amount, finalPrice: o.finalPrice, bulkOfferEligible: o.bulkOfferEligible !== false,
       currency: 'INR', active: true, custom: true, ...(photo(o.image) ? { image: photo(o.image) } : {}),
+      ...(photo(o.imageFull) ? { imageFull: photo(o.imageFull) } : {}),
     }));
   }
   return { ...data, products };

@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Item photos uploaded from the admin page (already compressed in the browser to ~5–25 KB).
+// Item photos uploaded from the admin page, compressed in the browser: a list picture (≤ 25 KB) and a zoom picture (≤ 180 KB).
 service firebase.storage {
   match /b/{bucket}/o {
     function isAdmin() {
@@ -11,7 +11,7 @@ service firebase.storage {
     match /products/{file} {
       allow read: if true;
       allow create, update: if isAdmin()
-        && request.resource.size < 60 * 1024
+        && request.resource.size < 300 * 1024
         && request.resource.contentType.matches('image/(webp|jpeg)');
       allow delete: if isAdmin();
     }

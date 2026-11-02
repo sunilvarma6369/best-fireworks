@@ -148,7 +148,7 @@ function productHtml(p) {
   const excluded = p.bulkOfferEligible ? '' : '<span class="tag" title="Bulk 10% offer does not apply">No bulk offer</span>';
   // Photo only when the shop uploaded one (lazy-loaded, ~5–15 KB). Otherwise a compact text card.
   const photo = p.image
-    ? `<div class="prod-thumb"><img src="${escapeHtml(p.image)}" alt="" width="320" height="240" loading="lazy" decoding="async" /></div>`
+    ? `<button type="button" class="prod-thumb" data-photo aria-label="View photo of ${escapeHtml(p.name)}"><img src="${escapeHtml(p.image)}" alt="" width="320" height="240" loading="lazy" decoding="async" /><span class="zoom-hint" aria-hidden="true">🔍</span></button>`
     : '';
   return `<li class="prod${inCart ? ' in-cart' : ''}${isSoldOut(p) ? ' sold-out' : ''}${p.image ? ' has-photo' : ''}" data-id="${p.id}">
       ${photo}
@@ -499,6 +499,39 @@ async function renderMyOrders() {
   );
 }
 
+// ── Item photo viewer ────────────────────────────────────
+let lbZoom = 1;
+function setZoom(level) {
+  lbZoom = Math.min(4, Math.max(1, level));
+  $('#lb-img').style.width = `${lbZoom * 100}%`;
+  $('#lb-stage').classList.toggle('zoomed', lbZoom > 1);
+}
+
+function openPhoto(id) {
+  const p = state.data.productsById.get(id);
+  if (!p?.image) return;
+  const img = $('#lb-img');
+  img.src = p.image; // the small picture shows at once; the sharp one replaces it when loaded
+  img.alt = p.name;
+  if (p.imageFull) {
+    const full = new Image();
+    full.onload = () => { if (img.alt === p.name) img.src = p.imageFull; };
+    full.src = p.imageFull;
+  }
+  $('#lb-name').textContent = p.name;
+  $('#lb-price').textContent = `${p.brand ?? ''}${p.brand ? ' · ' : ''}${formatRupees(p.finalPrice)}`;
+  setZoom(1);
+  openSheet($('#photo-sheet'));
+}
+
+function setupLightbox() {
+  $('#lb-img').addEventListener('click', () => setZoom(lbZoom >= 3 ? 1 : lbZoom + 1));
+  $('#photo-sheet').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-lb-zoom]');
+    if (b) setZoom(lbZoom + Number(b.dataset.lbZoom));
+  });
+}
+
 // ── Wire up ──────────────────────────────────────────────
 function setupUi() {
   document.querySelectorAll('.tab').forEach((tab) =>
@@ -527,6 +560,11 @@ function setupUi() {
     }, 150);
   });
 
+  $('#products').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-photo]');
+    if (b) openPhoto(b.closest('[data-id]').dataset.id);
+  });
+  setupLightbox();
   handleQtyEvents($('#products'));
   handleQtyEvents($('#cart-lines'));
 
