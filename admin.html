@@ -13,6 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/styles/base.css" />
     <link rel="stylesheet" href="/src/styles/admin.css" />
+    <link rel="stylesheet" href="/src/styles/billing.css" />
   </head>
   <body>
     <header class="a-top">
@@ -72,6 +73,7 @@
 
       <nav class="a-tabs" role="tablist">
         <button class="a-tab" role="tab" data-tab="orders" aria-selected="true">Orders <span class="count" id="new-count" hidden></span></button>
+        <button class="a-tab" role="tab" data-tab="billing" aria-selected="false">🧾 Billing</button>
         <button class="a-tab" role="tab" data-tab="dashboard" aria-selected="false">📊 Sales</button>
         <button class="a-tab" role="tab" data-tab="products" aria-selected="false">Items &amp; prices</button>
         <button class="a-tab" role="tab" data-tab="pdf" aria-selected="false">📄 Price list PDF</button>
@@ -92,6 +94,43 @@
           </div>
         </div>
         <div id="order-list" class="order-list"><p class="muted">Loading orders…</p></div>
+      </div>
+
+      <div class="a-panel billing" id="tab-billing" hidden>
+        <div class="bl-bills" id="bl-bills" aria-label="Open bills"></div>
+        <div class="bl-toolbar">
+          <div class="bl-mode" role="group" aria-label="Add items by">
+            <button type="button" data-bl-view="scan" aria-pressed="true">📷 Scan</button>
+            <button type="button" data-bl-view="search" aria-pressed="false">🔍 Search</button>
+          </div>
+          <button type="button" class="bl-sync" id="bl-sync" title="Tap to download new photos and prices">…</button>
+        </div>
+        <section id="bl-scan">
+          <div class="bl-camera">
+            <video id="bl-video" playsinline muted autoplay></video>
+            <div class="bl-guide" aria-hidden="true"></div>
+            <p class="bl-cam-msg" id="bl-cam-msg"></p>
+          </div>
+          <div class="bl-scan-actions">
+            <button type="button" class="btn btn-primary bl-shutter" id="bl-shutter">📷 Scan item</button>
+            <label class="switch"><input type="checkbox" id="bl-auto" /> Auto</label>
+          </div>
+          <div class="bl-matches" id="bl-matches"></div>
+        </section>
+        <section id="bl-search" hidden>
+          <input type="search" id="bl-q" placeholder="Search name, brand or #number" autocomplete="off" />
+          <div class="chips" id="bl-cats"></div>
+          <div class="bl-grid" id="bl-grid"></div>
+        </section>
+        <div class="bl-cart-head"><h3>This bill <small id="bl-count"></small></h3>
+          <button type="button" class="link" id="bl-clear">Clear</button></div>
+        <div class="bl-cart" id="bl-cart"></div>
+        <div class="bl-links"><button type="button" class="btn btn-sm btn-soft" id="bl-today-btn">📒 Today's bills</button></div>
+        <div class="bl-added" id="bl-added" role="status" hidden></div>
+        <div class="bl-bar">
+          <div><strong id="bl-total">₹0</strong><small id="bl-meta"></small></div>
+          <button type="button" class="btn btn-primary" id="bl-checkout" disabled>Checkout →</button>
+        </div>
       </div>
 
       <div class="a-panel" id="tab-dashboard" hidden>
@@ -157,6 +196,7 @@
           <label class="switch"><input type="checkbox" id="opt-sound" /> Play sound for new orders</label>
           <label class="switch"><input type="checkbox" id="opt-repeat" /> Repeat the sound every minute until an order is confirmed</label>
           <label class="switch"><input type="checkbox" id="opt-wake" /> Keep this screen on while the page is open</label>
+          <label class="switch"><input type="checkbox" id="opt-counter" /> This phone is a billing counter (opens Billing, skips online orders and order alerts, saves data)</label>
           <button class="btn btn-soft" id="test-alert" type="button">Play test alert</button>
           <p class="muted" id="push-status"></p>
         </div>
@@ -218,6 +258,10 @@
         </div>
       </form>
     </dialog>
+
+    <dialog class="a-dialog" id="bl-checkout-dialog" aria-label="Checkout"></dialog>
+    <dialog class="a-dialog" id="bl-done-dialog" aria-label="Bill saved"></dialog>
+    <dialog class="a-dialog" id="bl-today-dialog" aria-label="Today's bills"></dialog>
 
     <div id="print-area"></div>
     <div class="toast" id="toast" role="status" hidden></div>

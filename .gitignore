@@ -8,5 +8,6 @@ ios/
 *.jks
 *.keystore
 functions/node_modules/
+public/vendor/
 .env*
 !.env.live

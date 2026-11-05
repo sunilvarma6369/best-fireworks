@@ -21,6 +21,7 @@ import { computeSales, BASES, RANGES } from './lib/sales.js';
 import { STATUS } from './lib/status.js';
 import { itemSalesCsv, renderChips, renderDashboard } from './dashboard.js';
 import { openPdfTab, setupPdfTab } from './admin-pdf.js';
+import { billingCatalogChanged, closeBilling, openBilling, setupBilling } from './billing/billing.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const db = app ? getFirestore(app) : null;
@@ -35,7 +36,7 @@ if (useEmulators) {
 // Orders the admin page keeps live (newest first). Also the data the Sales dashboard is computed from.
 const ORDER_LIMIT = 1500;
 const PREFS_KEY = 'bfw.admin.prefs.v1';
-const prefs = { sound: true, repeat: true, wake: false, ...readJson(PREFS_KEY) };
+const prefs = { sound: true, repeat: true, wake: false, counter: false, ...readJson(PREFS_KEY) };
 
 const state = {
   user: null,
@@ -128,10 +129,15 @@ function setupAuth() {
     $('#top-right').hidden = !user;
     if (!user) return show('login-view');
 
+    // Remember the answer so the app (and counter billing) still opens without internet.
     let isAdmin = false;
+    const adminKey = `bfw.admin.${user.uid}`;
     try {
       isAdmin = (await getDoc(doc(db, 'admins', user.uid))).exists();
-    } catch { /* rules deny -> not an admin */ }
+      localStorage.setItem(adminKey, isAdmin ? '1' : '0');
+    } catch (err) {
+      isAdmin = err?.code !== 'permission-denied' && localStorage.getItem(adminKey) === '1';
+    }
     if (!isAdmin) {
       $('#my-uid').textContent = user.uid;
       return show('denied-view');
@@ -153,7 +159,8 @@ async function startApp() {
     }
   }
 
-  unsubs.push(
+  // A billing counter phone doesn't load online orders: saves reads and battery.
+  if (!prefs.counter) unsubs.push(
     onSnapshot(
       query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(ORDER_LIMIT)),
       (snap) => {
@@ -189,10 +196,16 @@ async function startApp() {
       fillSettingsForm();
       renderProducts();
       renderDash();
+      if (state.catalog) billingCatalogChanged(state.catalog);
     }),
   );
 
-  setupAlerts();
+  if (prefs.counter) {
+    document.body.classList.add('counter-mode');
+    $('.a-tab[data-tab="billing"]').click();
+  } else {
+    setupAlerts();
+  }
 }
 
 // ── Orders list ──────────────────────────────────────────
@@ -888,6 +901,13 @@ function setupSettingsUi() {
       .catch((err) => toast(`Could not save: ${err.message}`));
   });
 
+  const counterBox = $('#opt-counter');
+  counterBox.checked = prefs.counter;
+  counterBox.addEventListener('change', () => {
+    prefs.counter = counterBox.checked;
+    savePrefs();
+    location.reload();
+  });
   for (const [id, key] of [['opt-sound', 'sound'], ['opt-repeat', 'repeat'], ['opt-wake', 'wake']]) {
     const box = $(`#${id}`);
     box.checked = prefs[key];
@@ -1138,7 +1158,9 @@ function setupAlerts() {
 document.querySelectorAll('.a-tab').forEach((tab) =>
   tab.addEventListener('click', () => {
     document.querySelectorAll('.a-tab').forEach((t) => t.setAttribute('aria-selected', String(t === tab)));
-    for (const id of ['orders', 'dashboard', 'products', 'pdf', 'settings']) $(`#tab-${id}`).hidden = id !== tab.dataset.tab;
+    for (const id of ['orders', 'billing', 'dashboard', 'products', 'pdf', 'settings']) $(`#tab-${id}`).hidden = id !== tab.dataset.tab;
+    if (tab.dataset.tab === 'billing') openBilling();
+    else closeBilling();
     if (tab.dataset.tab === 'dashboard') renderDash();
     if (tab.dataset.tab === 'pdf') openPdfTab();
   }),
@@ -1153,6 +1175,7 @@ if (!app) {
   setupDashboardUi();
   setupSettingsUi();
   setupPdfTab({ db, toast, getCatalog: () => state.catalog, getSoldOut: () => state.settings.soldOut ?? [] });
+  setupBilling({ db, toast, getUser: () => state.user, openExternal }).catch((e) => console.error('Billing setup failed', e));
   $('#go-pdf').addEventListener('click', () => $('.a-tab[data-tab="pdf"]').click());
   setupAuth();
 }

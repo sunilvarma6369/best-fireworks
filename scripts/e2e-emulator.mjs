@@ -121,5 +121,18 @@ check(added?.category === 'Sounds' && added.listNo === 146 && added.finalPrice =
 check(await denied(() => setDoc(doc(stranger, 'settings', 'public'), { catalog: { 'OTH-001': { finalPrice: 1 } } }, { merge: true })), 'stranger cannot change prices');
 await setDoc(doc(shop, 'settings', 'public'), { catalog: {} }, { mergeFields: ['catalog'] });
 
+// 7. Counter billing: one write per bill, shop staff only
+const billNo = `E2E-${String(Date.now()).slice(-4)}`;
+const bill = (over = {}) => ({
+  billNo, billedAt: new Date().toISOString(), payment: 'upi', source: 'counter',
+  items: [{ id: 'STD-020', name: 'Test', qty: 1, finalPrice: 3200 }], totals: { netPayable: 3200, paid: 3150, adjustment: -50 }, ...over,
+});
+check(await denied(() => setDoc(doc(stranger, 'sales', billNo), bill())), 'stranger cannot save a counter bill');
+check(await denied(() => setDoc(doc(shop, 'sales', billNo), bill({ payment: 'cheque' }))), 'bill with an unknown payment mode is refused');
+check(await denied(() => setDoc(doc(shop, 'sales', 'OTHER-1'), bill())), 'bill saved under a different number is refused');
+await setDoc(doc(shop, 'sales', billNo), bill());
+check((await getDoc(doc(shop, 'sales', billNo))).data()?.totals.paid === 3150, `shop saved counter bill ${billNo} in one write`);
+check(await denied(() => getDocs(collection(stranger, 'sales'))), 'stranger cannot list counter bills');
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');
 process.exit(failures ? 1 : 0);

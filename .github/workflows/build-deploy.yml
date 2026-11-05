@@ -45,6 +45,9 @@ jobs:
           npx cap add android
           # Firebase config for push notifications (not secret; Capacitor applies the google-services plugin when present)
           cp android-config/google-services.json android/app/google-services.json
+          # Live camera for counter-billing scanning, and a short vibration when an item is added
+          sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />#' android/app/src/main/AndroidManifest.xml
+          grep -c "permission.CAMERA" android/app/src/main/AndroidManifest.xml
 
       - name: App icon and splash screen
         continue-on-error: true

@@ -7,6 +7,7 @@ rules_version = '2';
 //   settings/public     sold-out list, notice banner, ordersOpen flag. Public read, admin write.
 //   admins/{uid}        one doc per shop staff login. Create these by hand in the Firebase console.
 //   adminTokens/{token} push-notification tokens of shop devices (used by the Cloud Function).
+//   sales/{billNo}      counter bills from the billing screen (one write per bill). Admins only.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -79,6 +80,15 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/orders/$(code)).data.totals.netPayable
            == request.resource.data.netPayable;
       allow update, delete: if isAdmin();
+    }
+
+    match /sales/{billNo} {
+      allow read, update, delete: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.billNo == billNo
+        && request.resource.data.items is list && request.resource.data.items.size() <= 400
+        && request.resource.data.totals.paid is number
+        && request.resource.data.payment in ['upi', 'cash', 'card'];
     }
 
     match /settings/{docId} {
