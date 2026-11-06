@@ -15,7 +15,7 @@
     "preview": "vite preview",
     "deploy": "npm run build && firebase deploy --only hosting,firestore,storage",
     "deploy:rules": "firebase deploy --only firestore,storage",
-    "deploy:backend": "npm --prefix functions install && firebase deploy --only firestore,storage,functions",
+    "deploy:backend": "cd functions && npm install && cd .. && firebase deploy --only firestore,storage,functions",
     "deploy:functions": "npm --prefix functions install && firebase deploy --only functions",
     "build:app": "npm run build && node scripts/make-app-web.mjs"
   },
