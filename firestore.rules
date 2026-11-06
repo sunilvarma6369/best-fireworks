@@ -2,18 +2,43 @@ rules_version = '2';
 
 // Data model
 //   orders/{code}       full order with customer name/phone and the private 4-digit pickup code.
-//                       Customers create, only admins read/update.
+//                       Customers create; shop staff read and update.
 //   tracking/{code}     public status for the customer (no personal details). Readable by anyone who has the code.
-//   settings/public     sold-out list, notice banner, ordersOpen flag. Public read, admin write.
-//   admins/{uid}        one doc per shop staff login. Create these by hand in the Firebase console.
-//   adminTokens/{token} push-notification tokens of shop devices (used by the Cloud Function).
-//   sales/{billNo}      counter bills from the billing screen (one write per bill). Admins only.
+//   settings/{doc}      public settings, item/price edits, PDF settings. Public read, admin write.
+//   admins/{uid}        one doc per shop login: name, role ('super' | 'admin' | 'sales'; missing = admin), active.
+//                       Written only by the staffUsers Cloud Function (Users tab) or by hand in the Firebase console.
+//   adminTokens/{token} push-notification tokens of staff devices (used by the Cloud Function).
+//   sales/{billNo}      counter bills, one write per bill. Admins see every bill; sales staff only their own.
+//
+// Roles
+//   sales   billing and online orders; sees only their own counter sales
+//   admin   everything except managing users: all sales, prices, shop settings
+//   super   everything, including the Users tab (via the Cloud Function)
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isAdmin() {
+    function staffDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
+    }
+
+    // Any shop login that is switched on (super admin, admin or sales)
+    function isStaff() {
       return request.auth != null
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && staffDoc().get('active', true) == true;
+    }
+
+    function role() {
+      return staffDoc().get('role', 'admin');
+    }
+
+    // Admin or super admin: prices, settings, everyone's sales
+    function isAdmin() {
+      return isStaff() && role() in ['admin', 'super'];
+    }
+
+    function isSuper() {
+      return isStaff() && role() == 'super';
     }
 
     // Same format as src/lib/codes.js
@@ -63,14 +88,15 @@ service cloud.firestore {
 
     match /orders/{code} {
       allow create: if validCode(code) && validNewOrder(code);
-      allow read, update, delete: if isAdmin();
+      allow read, update: if isStaff();
+      allow delete: if isAdmin();
     }
 
     match /tracking/{code} {
-      // Codes are random, so only someone who was given the code can look it up. Listing is admin-only.
+      // Codes are random, so only someone who was given the code can look it up. Listing is staff-only.
       allow get: if true;
-      allow list: if isAdmin();
-      allow create: if isAdmin() || validCode(code)
+      allow list: if isStaff();
+      allow create: if isStaff() || validCode(code)
         && request.resource.data.keys().hasOnly(['code', 'status', 'createdAt', 'updatedAt', 'itemCount',
                                                  'netPayable', 'fulfilment', 'pickupDate', 'message'])
         && request.resource.data.code == code
@@ -79,16 +105,42 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time
         && getAfter(/databases/$(database)/documents/orders/$(code)).data.totals.netPayable
            == request.resource.data.netPayable;
-      allow update, delete: if isAdmin();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    function validBill(billNo) {
+      let d = request.resource.data;
+      return d.billNo == billNo
+        && d.items is list && d.items.size() >= 1 && d.items.size() <= 400
+        && d.totals is map && d.totals.paid is number && d.totals.paid >= 0
+        && d.payment in ['upi', 'cash', 'card']
+        && d.get('status', 'ok') in ['ok', 'void']
+        && d.get('customer', {}) is map;
     }
 
     match /sales/{billNo} {
-      allow read, update, delete: if isAdmin();
-      allow create: if isAdmin()
-        && request.resource.data.billNo == billNo
-        && request.resource.data.items is list && request.resource.data.items.size() <= 400
-        && request.resource.data.totals.paid is number
-        && request.resource.data.payment in ['upi', 'cash', 'card'];
+      // A bill is saved once, by the person who billed it (an admin may also upload a bill made on a shared phone).
+      allow create: if isStaff() && validBill(billNo)
+        && (request.resource.data.get('cashierUid', '') == request.auth.uid || isAdmin())
+        && request.resource.data.get('updatedAt', null) == request.time;
+      allow read: if isAdmin() || (isStaff() && resource.data.get('cashierUid', '') == request.auth.uid);
+      // Corrections only: cancel a bill, or fix the payment mode / customer. Items and amounts never change.
+      // Sales staff may correct their own bill for 30 minutes; admins any time (and may restore a cancelled bill).
+      allow update: if isStaff()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+             'status', 'voidReason', 'voidedAt', 'voidedBy', 'voidedByName',
+             'payment', 'customer', 'editedAt', 'editedBy', 'editedByName', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.get('status', 'ok') in ['ok', 'void']
+        && request.resource.data.payment in ['upi', 'cash', 'card']
+        && request.resource.data.get('customer', {}) is map
+        && (isAdmin()
+            || (resource.data.get('cashierUid', '') == request.auth.uid
+                && resource.data.get('status', 'ok') == 'ok'
+                && request.time < resource.data.createdAt + duration.value(30, 'm')));
+      // Bills are never deleted, only cancelled, so the day's totals can always be checked.
+      allow delete: if false;
     }
 
     match /settings/{docId} {
@@ -97,13 +149,13 @@ service cloud.firestore {
     }
 
     match /admins/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      allow read: if request.auth != null && (request.auth.uid == uid || isSuper());
       allow write: if false;
     }
 
     match /adminTokens/{token} {
       allow read, delete: if isAdmin();
-      allow create, update: if isAdmin() && request.resource.data.uid == request.auth.uid;
+      allow create, update: if isStaff() && request.resource.data.uid == request.auth.uid;
     }
   }
 }

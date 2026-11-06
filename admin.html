@@ -19,7 +19,7 @@
     <header class="a-top">
       <div class="a-brand">
         <img src="/icons/favicon.svg" alt="" width="34" height="34" />
-        <span><strong>Best FireWorks</strong><small>Shop admin</small></span>
+        <span><strong>Best FireWorks</strong><small id="who">Shop admin</small></span>
       </div>
       <div class="a-top-right" id="top-right" hidden>
         <span class="pill" id="alert-pill">🔕 Alerts off</span>
@@ -37,7 +37,8 @@
     <section class="a-card a-narrow" id="login-view" hidden>
       <h1>Shop login</h1>
       <form id="login-form" class="a-form">
-        <label>Email <input name="email" type="email" autocomplete="username" required /></label>
+        <label>Username <small>(or email)</small>
+          <input name="email" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required /></label>
         <label>Password <input name="password" type="password" autocomplete="current-password" required /></label>
         <p class="a-error" id="login-error" hidden></p>
         <button class="btn btn-primary btn-block" type="submit">Sign in</button>
@@ -47,10 +48,11 @@
 
     <!-- Logged in but not an admin -->
     <section class="a-card a-narrow" id="denied-view" hidden>
-      <h1>Not an admin yet</h1>
-      <p>This login works, but it is not on the shop's admin list. In the Firebase console, open <strong>Firestore Database</strong>, create a collection <code>admins</code>, and add a document whose ID is:</p>
+      <h1 id="denied-title">No access yet</h1>
+      <p id="denied-text">This login works, but it is not on the shop's list of users. Ask the shop owner to add you in <strong>Users</strong>.</p>
       <p class="uid-box"><code id="my-uid"></code> <button class="btn btn-sm btn-soft" id="copy-uid" type="button">Copy</button></p>
-      <p>Give it one field, for example <code>name</code> = your name. Then reload this page.</p>
+      <p class="fine">Owner setting up the very first login: in the Firebase console, open <strong>Firestore Database</strong>, collection <code>admins</code>, add a document with the ID above and the fields <code>name</code> (your name) and <code>role</code> = <code>super</code>. Then reload.</p>
+      <button class="btn btn-soft" id="denied-signout" type="button">Sign out</button>
     </section>
 
     <!-- Main app -->
@@ -75,8 +77,9 @@
         <button class="a-tab" role="tab" data-tab="orders" aria-selected="true">Orders <span class="count" id="new-count" hidden></span></button>
         <button class="a-tab" role="tab" data-tab="billing" aria-selected="false">🧾 Billing</button>
         <button class="a-tab" role="tab" data-tab="dashboard" aria-selected="false">📊 Sales</button>
-        <button class="a-tab" role="tab" data-tab="products" aria-selected="false">Items &amp; prices</button>
+        <button class="a-tab admin-only" role="tab" data-tab="products" aria-selected="false">Items &amp; prices</button>
         <button class="a-tab" role="tab" data-tab="pdf" aria-selected="false">📄 Price list PDF</button>
+        <button class="a-tab super-only" role="tab" data-tab="users" aria-selected="false">👥 Users</button>
         <button class="a-tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
       </nav>
 
@@ -98,46 +101,60 @@
 
       <div class="a-panel billing" id="tab-billing" hidden>
         <div class="bl-bills" id="bl-bills" aria-label="Open bills"></div>
-        <div class="bl-toolbar">
-          <div class="bl-mode" role="group" aria-label="Add items by">
-            <button type="button" data-bl-view="scan" aria-pressed="true">📷 Scan</button>
-            <button type="button" data-bl-view="search" aria-pressed="false">🔍 Search</button>
-          </div>
+        <div class="bl-head">
           <button type="button" class="bl-sync" id="bl-sync" title="Tap to download new photos and prices">…</button>
+          <button type="button" class="btn btn-sm btn-soft" id="bl-bills-btn">📒 Bills</button>
+        </div>
+        <div class="bl-seg" role="tablist" aria-label="Add items or check the bill">
+          <button type="button" role="tab" data-bl-view="scan" aria-selected="true">📷 Scan</button>
+          <button type="button" role="tab" data-bl-view="search" aria-selected="false">🔍 Search</button>
+          <button type="button" role="tab" data-bl-view="bill" aria-selected="false">🧾 Bill <span class="bl-seg-count" id="bl-seg-count" hidden></span></button>
         </div>
         <section id="bl-scan">
           <div class="bl-camera">
             <video id="bl-video" playsinline muted autoplay></video>
             <div class="bl-guide" aria-hidden="true"></div>
             <p class="bl-cam-msg" id="bl-cam-msg"></p>
+            <div class="bl-added" id="bl-added" role="status" hidden></div>
           </div>
           <div class="bl-scan-actions">
             <button type="button" class="btn btn-primary bl-shutter" id="bl-shutter">📷 Scan item</button>
             <label class="switch"><input type="checkbox" id="bl-auto" /> Auto</label>
           </div>
           <div class="bl-matches" id="bl-matches"></div>
+          <div class="bl-recent" id="bl-recent"></div>
         </section>
         <section id="bl-search" hidden>
-          <input type="search" id="bl-q" placeholder="Search name, brand or #number" autocomplete="off" />
-          <div class="chips" id="bl-cats"></div>
+          <div class="bl-search-head">
+            <input type="search" id="bl-q" placeholder="Search name, brand or #number" autocomplete="off" />
+            <div class="chips" id="bl-cats"></div>
+          </div>
           <div class="bl-grid" id="bl-grid"></div>
+          <p class="fine" id="bl-results-note"></p>
         </section>
-        <div class="bl-cart-head"><h3>This bill <small id="bl-count"></small></h3>
-          <button type="button" class="link" id="bl-clear">Clear</button></div>
-        <div class="bl-cart" id="bl-cart"></div>
-        <div class="bl-links"><button type="button" class="btn btn-sm btn-soft" id="bl-today-btn">📒 Today's bills</button></div>
-        <div class="bl-added" id="bl-added" role="status" hidden></div>
+        <section id="bl-billview" hidden>
+          <div class="bl-cart-head"><h3 id="bl-bill-title">Bill</h3><small id="bl-count"></small></div>
+          <div class="bl-cart" id="bl-cart"></div>
+          <div id="bl-sum-mini"></div>
+          <div class="bl-bill-actions">
+            <button type="button" class="btn btn-sm btn-soft" id="bl-hold">⏸ Hold &amp; start a new bill</button>
+            <button type="button" class="btn btn-sm btn-soft" id="bl-clear">Clear items</button>
+            <button type="button" class="btn btn-sm btn-danger" id="bl-drop">Delete bill</button>
+          </div>
+        </section>
         <div class="bl-bar">
-          <div><strong id="bl-total">₹0</strong><small id="bl-meta"></small></div>
+          <button type="button" class="bl-bar-sum" data-bl-view="bill" aria-label="Check this bill"><strong id="bl-total">₹0</strong><small id="bl-meta"></small></button>
           <button type="button" class="btn btn-primary" id="bl-checkout" disabled>Checkout →</button>
         </div>
       </div>
 
       <div class="a-panel" id="tab-dashboard" hidden>
         <div class="dash-filters">
+          <div class="status-chips admin-only" id="dash-channel" role="group" aria-label="Which sales"></div>
           <div class="status-chips" id="dash-range" role="group" aria-label="Time range"></div>
           <div class="status-chips" id="dash-basis" role="group" aria-label="Which orders to count"></div>
         </div>
+        <p class="dash-sync" id="dash-sync"></p>
         <div id="dashboard"></div>
       </div>
 
@@ -164,7 +181,7 @@
           <label class="switch"><input type="checkbox" id="pdf-hide-soldout" /> Leave out items marked sold out</label>
           <p class="pdf-status" id="pdf-status" role="status"></p>
         </div>
-        <form id="pdf-form" autocomplete="off">
+        <form id="pdf-form" class="admin-only" autocomplete="off">
           <div id="pdf-groups"></div>
           <details class="a-card pdf-group">
             <summary>Header images</summary>
@@ -178,8 +195,29 @@
         </form>
       </div>
 
+      <div class="a-panel" id="tab-users" hidden>
+        <div class="us-head">
+          <div>
+            <h2>Shop users</h2>
+            <p class="muted">Everyone who can sign in to the app. There is no sign-up page: only a super admin can add a login. <span id="user-count"></span></p>
+          </div>
+          <button class="btn btn-primary" id="user-add" type="button">＋ Add user</button>
+        </div>
+        <div class="us-list" id="user-list"></div>
+        <div class="a-card us-help">
+          <h3>What each role can do</h3>
+          <p><span class="badge role-sales">Sales</span> Billing (scan, search, checkout), online orders, and their own sales and bills. Can cancel or fix their own bill for 30 minutes.</p>
+          <p><span class="badge role-admin">Admin</span> Everything sales can do, plus all sales by everyone, cancelling any bill, items &amp; prices, the PDF settings and shop settings.</p>
+          <p><span class="badge role-super">Super admin</span> Everything, plus this Users tab: add people, set passwords, change roles, switch logins off.</p>
+        </div>
+      </div>
+
       <div class="a-panel" id="tab-settings" hidden>
-        <form id="settings-form" class="a-card a-form">
+        <div class="a-card who-card">
+          <h2>Signed in</h2>
+          <p id="who-detail" class="muted"></p>
+        </div>
+        <form id="settings-form" class="a-card a-form admin-only">
           <h2>Online booking</h2>
           <label class="switch"><input type="checkbox" name="ordersOpen" /> Accept online orders</label>
           <label class="switch"><input type="checkbox" name="deliveryEnabled" /> Offer home delivery <small>(pickup at the stall is always available)</small></label>
@@ -261,7 +299,10 @@
 
     <dialog class="a-dialog" id="bl-checkout-dialog" aria-label="Checkout"></dialog>
     <dialog class="a-dialog" id="bl-done-dialog" aria-label="Bill saved"></dialog>
-    <dialog class="a-dialog" id="bl-today-dialog" aria-label="Today's bills"></dialog>
+    <!-- Bills list, then one bill on top of it (keep this order: the back button closes the last open dialog) -->
+    <dialog class="a-dialog" id="bills-dialog" aria-label="Bills"></dialog>
+    <dialog class="a-dialog" id="bill-dialog" aria-label="Bill"></dialog>
+    <dialog class="a-dialog" id="user-dialog" aria-label="User"></dialog>
 
     <div id="print-area"></div>
     <div class="toast" id="toast" role="status" hidden></div>

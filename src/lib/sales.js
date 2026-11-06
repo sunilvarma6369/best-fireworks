@@ -1,5 +1,5 @@
-// Sales numbers for the admin dashboard, computed from the orders the admin page already has loaded.
-// All money is in paise.
+// Sales numbers for the admin dashboard: online bookings (computeSales, from the orders the admin page has loaded)
+// and counter bills (computeCounter, from the bills ledger). All money is in paise.
 import { toPaise } from './money.js';
 
 const istDate = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
@@ -15,6 +15,35 @@ export const RANGES = { today: 'Today', yesterday: 'Yesterday', week: 'Last 7 da
 export const BASES = { booked: 'All booked', completed: 'Completed only' };
 const MAX_DAYS = 21;
 
+/** First and last day (YYYY-MM-DD, India time) of a range; from = null means since the start. */
+export function rangeBounds(range, today) {
+  const from = { today, yesterday: shiftDate(today, -1), week: shiftDate(today, -6) }[range] ?? null;
+  const to = range === 'yesterday' ? shiftDate(today, -1) : today;
+  return { from, to };
+}
+
+/**
+ * Every day of the range (or the latest MAX_DAYS of the season), zeros included, from one or more day maps
+ * (Map date → { revenue, orders }). With two maps, the first is counter sales and the second online sales.
+ */
+export function buildDaySeries(dayMaps, { from, to }) {
+  const keys = dayMaps.flatMap((m) => [...m.keys()]).sort();
+  const start = from ?? (keys[0] && keys[0] > shiftDate(to, -(MAX_DAYS - 1)) ? keys[0] : shiftDate(to, -(MAX_DAYS - 1)));
+  const out = [];
+  for (let d = start; d <= to; d = shiftDate(d, 1)) {
+    const row = { date: d, revenue: 0, orders: 0, counter: 0, online: 0 };
+    dayMaps.forEach((m, i) => {
+      const v = m.get(d);
+      if (!v) return;
+      row.revenue += v.revenue;
+      row.orders += v.orders;
+      row[i === 0 ? 'counter' : 'online'] += v.revenue;
+    });
+    out.push(row);
+  }
+  return out;
+}
+
 /**
  * @param {object[]} orders    Firestore order documents
  * @param {object} opts
@@ -24,8 +53,7 @@ const MAX_DAYS = 21;
  * @param {string} opts.today  YYYY-MM-DD (India time)
  */
 export function computeSales(orders, { range = 'all', basis = 'booked', categoryOf, today }) {
-  const from = { today, yesterday: shiftDate(today, -1), week: shiftDate(today, -6) }[range] ?? null;
-  const to = range === 'yesterday' ? shiftDate(today, -1) : today;
+  const { from, to } = rangeBounds(range, today);
   const inRange = orders.filter((o) => {
     const d = o.createdAt?.toDate?.();
     if (!d) return false;
@@ -87,12 +115,6 @@ export function computeSales(orders, { range = 'all', basis = 'booked', category
     }
   }
 
-  // Daily series: every day in the range (or the most recent MAX_DAYS for the whole season), zeros included.
-  const dayKeys = [...days.keys()].sort();
-  const start = from ?? (dayKeys[0] && dayKeys[0] > shiftDate(to, -(MAX_DAYS - 1)) ? dayKeys[0] : shiftDate(to, -(MAX_DAYS - 1)));
-  const daySeries = [];
-  for (let d = start; d <= to; d = shiftDate(d, 1)) daySeries.push(days.get(d) ?? { date: d, revenue: 0, orders: 0 });
-
   return {
     orders: counted.length,
     revenue,
@@ -107,10 +129,134 @@ export function computeSales(orders, { range = 'all', basis = 'booked', category
     statusCounts,
     categories: [...categories.values()].sort((a, b) => b.revenue - a.revenue),
     items: [...items.values()],
-    days: daySeries,
+    // Every day in the range (or the most recent MAX_DAYS for the whole season), zeros included.
+    days: buildDaySeries([days], { from, to }).map(({ date, revenue: r, orders: n }) => ({ date, revenue: r, orders: n })),
+    dayMap: days,
     hours,
     fulfilment,
     source,
     sections,
+    from,
+    to,
   };
+}
+
+const PAY_MODES = ['upi', 'cash', 'card'];
+
+/**
+ * Counter bills (see billing/ledger.js) for one range. Cancelled bills are left out of every total and counted
+ * separately. Bill amounts are stored in rupees; everything returned is in paise.
+ */
+export function computeCounter(bills, { range = 'all', categoryOf, today }) {
+  const { from, to } = rangeBounds(range, today);
+  const inRange = bills.filter((b) => (!from || b.day >= from) && b.day <= to);
+  const paid = inRange.filter((b) => b.status !== 'void');
+  const voided = inRange.filter((b) => b.status === 'void');
+
+  const pay = Object.fromEntries(PAY_MODES.map((k) => [k, { bills: 0, amount: 0 }]));
+  const people = new Map();
+  const person = (b) => {
+    const key = b.cashierUid || b.cashierName || 'unknown';
+    if (!people.has(key)) {
+      people.set(key, {
+        key, uid: b.cashierUid, name: b.cashierName || 'Unknown', bills: 0, collected: 0, boxes: 0, voids: 0, voidValue: 0,
+        upi: 0, cash: 0, card: 0,
+      });
+    }
+    return people.get(key);
+  };
+  const items = new Map();
+  const categories = new Map();
+  const days = new Map();
+  const hours = Array(24).fill(0);
+  const customers = new Set();
+  const sections = { others: 0, standard: 0 };
+  let collected = 0, boxes = 0, itemDiscount = 0, bulkDiscount = 0, adjustDown = 0, adjustUp = 0, pending = 0;
+
+  for (const b of paid) {
+    const t = b.totals ?? {};
+    const amt = toPaise(t.paid ?? 0);
+    const adj = toPaise(t.adjustment ?? 0);
+    collected += amt;
+    boxes += t.itemCount ?? 0;
+    itemDiscount += toPaise(t.discountTotal ?? 0);
+    bulkDiscount += toPaise(t.bulkDiscount ?? 0);
+    if (adj < 0) adjustDown -= adj;
+    else adjustUp += adj;
+    if (b.pending) pending++;
+    const mode = PAY_MODES.includes(b.payment) ? b.payment : 'cash';
+    pay[mode].bills++;
+    pay[mode].amount += amt;
+    const p = person(b);
+    p.bills++;
+    p.collected += amt;
+    p.boxes += t.itemCount ?? 0;
+    p[mode] += amt;
+    if (b.customer?.phone) customers.add(b.customer.phone);
+    hours[istHour(new Date(b.billedAt))]++;
+    const dayRow = days.get(b.day) ?? { date: b.day, revenue: 0, orders: 0 };
+    dayRow.revenue += amt;
+    dayRow.orders++;
+    days.set(b.day, dayRow);
+
+    for (const it of b.items ?? []) {
+      const line = toPaise(it.lineTotal ?? 0);
+      const cat = categoryOf(it);
+      const c = categories.get(cat.id) ?? { id: cat.id, name: cat.name, revenue: 0, boxes: 0 };
+      c.revenue += line;
+      c.boxes += it.qty;
+      categories.set(cat.id, c);
+      const i = items.get(it.id) ?? { id: it.id, name: it.name, brand: it.brand, category: cat.name, revenue: 0, boxes: 0, orders: 0 };
+      i.revenue += line;
+      i.boxes += it.qty;
+      i.orders++;
+      items.set(it.id, i);
+      sections[cat.section === 'standard' ? 'standard' : 'others'] += line;
+    }
+  }
+  let voidValue = 0;
+  for (const b of voided) {
+    const amt = toPaise(b.totals?.paid ?? 0);
+    voidValue += amt;
+    const p = person(b);
+    p.voids++;
+    p.voidValue += amt;
+  }
+
+  return {
+    bills: paid.length,
+    collected,
+    avgBill: paid.length ? Math.round(collected / paid.length) : 0,
+    boxes,
+    itemDiscount,
+    bulkDiscount,
+    adjustDown,
+    adjustUp,
+    pending,
+    customers: customers.size,
+    pay,
+    people: [...people.values()].sort((a, b) => b.collected - a.collected),
+    voids: { bills: voided.length, amount: voidValue },
+    items: [...items.values()],
+    categories: [...categories.values()].sort((a, b) => b.revenue - a.revenue),
+    days: buildDaySeries([days], { from, to }),
+    dayMap: days,
+    hours,
+    sections,
+    from,
+    to,
+  };
+}
+
+/** Item or category totals from both channels, for the "All sales" view. */
+export function mergeTotals(a, b) {
+  const map = new Map();
+  for (const i of [...a, ...b]) {
+    const cur = map.get(i.id) ?? { ...i, revenue: 0, boxes: 0, orders: 0 };
+    cur.revenue += i.revenue;
+    cur.boxes += i.boxes;
+    cur.orders += i.orders ?? 0;
+    map.set(i.id, cur);
+  }
+  return [...map.values()].sort((x, y) => y.revenue - x.revenue);
 }

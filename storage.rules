@@ -3,9 +3,12 @@ rules_version = '2';
 // Item photos uploaded from the admin page, compressed in the browser: a list picture (≤ 25 KB) and a zoom picture (≤ 180 KB).
 service firebase.storage {
   match /b/{bucket}/o {
+    // Admin or super admin (sales staff cannot change item photos). Same roles as firestore.rules.
     function isAdmin() {
       return request.auth != null
-        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.get('active', true) == true
+        && firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.get('role', 'admin') in ['admin', 'super'];
     }
 
     match /products/{file} {

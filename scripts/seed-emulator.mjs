@@ -1,5 +1,5 @@
 // Local testing only: creates a shop admin login in the Firebase emulators (`npm run emulators` must be running).
-// usage: npm run seed            -> admin@bestfireworks.test / diwali2026
+// usage: npm run seed            -> admin@bestfireworks.test / diwali2026 (super admin)
 const PROJECT = 'demo-best-fireworks';
 const EMAIL = process.argv[2] ?? 'admin@bestfireworks.test';
 const PASSWORD = process.argv[3] ?? 'diwali2026';
@@ -23,7 +23,7 @@ if (!r.ok) {
 const uid = r.json.localId;
 
 // "Bearer owner" bypasses security rules in the emulator, like editing in the Firebase console.
-const w = await call(`${FIRESTORE}/admins?documentId=${uid}`, { fields: { name: { stringValue: 'Shop owner (local test)' } } }, { Authorization: 'Bearer owner' });
+const w = await call(`${FIRESTORE}/admins?documentId=${uid}`, { fields: { name: { stringValue: 'Shop owner (local test)' }, role: { stringValue: 'super' } } }, { Authorization: 'Bearer owner' });
 if (!w.ok && w.json.error?.status !== 'ALREADY_EXISTS') {
   console.error('Could not create admins doc', w.json);
   process.exit(1);

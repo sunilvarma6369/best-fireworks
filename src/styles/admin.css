@@ -504,7 +504,8 @@ code {
 /* Order dialog */
 .a-dialog {
   width: min(720px, 100%);
-  max-height: 100dvh;
+  /* A tall sheet stops below the phone's status bar, so its top and the close button stay easy to reach */
+  max-height: calc(100dvh - var(--safe-top) - 14px);
   margin: auto auto 0;
   padding: 0;
   border: 0;
@@ -531,7 +532,7 @@ code {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.85rem 16px 0.6rem;
+  padding: 0.85rem 14px 0.6rem 18px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
@@ -546,11 +547,15 @@ code {
   padding: 0.9rem 16px calc(1.4rem + var(--safe-bottom));
 }
 .close {
-  width: 40px;
-  height: 40px;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  margin: -2px 0 -2px 0.5rem;
   border: 0;
   border-radius: 50%;
   background: var(--surface-2);
+  color: var(--text);
+  font-size: 1.05rem;
   cursor: pointer;
 }
 .d-cust {
@@ -1070,4 +1075,438 @@ code {
 }
 .a-panel .pdf-group {
   margin: 0.75rem 0;
+}
+
+/* ── Roles: what each login sees (firestore.rules enforces the same) ── */
+body[data-role='sales'] .admin-only,
+body:not([data-role='super']) .super-only {
+  display: none !important;
+}
+
+/* ── Users tab (super admin) ── */
+.us-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.us-head h2 {
+  margin: 0 0 0.2rem;
+}
+.us-head p {
+  margin: 0;
+  font-size: 0.88rem;
+}
+.us-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+@media (min-width: 820px) {
+  .us-list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.us-card {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.65rem 0.75rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.us-card.is-off {
+  opacity: 0.6;
+}
+.us-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.us-avatar.role-super {
+  background: #fdecee;
+  color: var(--brand-dark);
+}
+.us-avatar.role-admin {
+  background: var(--info-soft);
+  color: var(--info);
+}
+.us-avatar.role-sales {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.us-info {
+  min-width: 0;
+}
+.us-info strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.us-info strong small {
+  color: var(--muted);
+  font-weight: 500;
+}
+.us-info > small {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.us-tags {
+  display: grid;
+  justify-items: end;
+  gap: 0.2rem;
+}
+.badge.role-super {
+  background: #fdecee;
+  color: var(--brand-dark);
+}
+.badge.role-admin {
+  background: var(--info-soft);
+  color: var(--info);
+}
+.badge.role-sales {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.us-help {
+  margin-top: 1rem;
+}
+.us-help h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+.us-help p {
+  margin: 0.35rem 0;
+  font-size: 0.88rem;
+}
+.us-roles {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.us-roles legend {
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.a-form .us-role {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 0.6rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--border) inset;
+  cursor: pointer;
+}
+.a-form .us-role:has(input:checked) {
+  background: var(--brand-soft);
+  box-shadow: 0 0 0 2px var(--brand) inset;
+}
+.us-role input {
+  width: 18px;
+  min-height: 0;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--brand);
+}
+.us-role small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.us-pass {
+  display: flex;
+  gap: 0.4rem;
+}
+.us-pass input {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: 0.03em;
+}
+.us-done {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  padding: 1rem;
+  border-radius: 14px;
+  background: var(--success-soft);
+}
+.us-done span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.us-done strong {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 1.1rem;
+}
+.who-card h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+.who-card p {
+  margin: 0;
+}
+
+/* ── Sales tab: salesperson rows and actions ── */
+.dash-sync {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.dash-sync:empty {
+  display: none;
+}
+.people {
+  display: grid;
+  gap: 0.5rem;
+}
+.person {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  gap: 0.3rem;
+  padding: 0.6rem 0.7rem;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.person.online {
+  cursor: default;
+}
+.person-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.person-top span {
+  font-weight: 800;
+}
+.person small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+.warn-text {
+  color: var(--danger);
+  font-weight: 600;
+}
+.dash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+/* ── Bills manager ── */
+.bm {
+  gap: 0.6rem;
+}
+.bm-selects {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.4rem;
+}
+.bm-selects select {
+  min-width: 0;
+}
+.bm-sync {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.bm-sync.busy {
+  color: var(--info);
+}
+.bm-sync.bad {
+  color: var(--danger);
+}
+.bm-sum {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.bm-sum > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.bm-sum > div:first-child strong {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+}
+.bm-sum > div:first-child span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.bm-pay {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.9rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.bm-pay b {
+  color: var(--text);
+}
+.bm-day {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.4rem 0 0;
+  font-size: 0.9rem;
+}
+.bm-day small {
+  color: var(--muted);
+  font-weight: 600;
+}
+.bm-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bm-row.is-void {
+  opacity: 0.62;
+}
+.bm-row.is-void .bm-amt strong {
+  text-decoration: line-through;
+}
+.bm-main {
+  min-width: 0;
+}
+.bm-main small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+.bm-amt {
+  display: grid;
+  justify-items: end;
+  gap: 0.15rem;
+}
+.bm-empty {
+  padding: 1rem 0;
+  text-align: center;
+}
+.badge.bill-ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.badge.bill-void {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.badge.bill-pending {
+  background: var(--gold-soft);
+  color: var(--gold-ink);
+}
+.bd-hero {
+  display: grid;
+  justify-items: center;
+  gap: 0.15rem;
+  padding: 0.9rem;
+  border-radius: 14px;
+  background: var(--success-soft);
+  color: var(--success);
+  text-align: center;
+}
+.bd-hero strong {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1.1;
+}
+.bd-hero.is-void {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.bd-hero.is-void strong {
+  text-decoration: line-through;
+}
+.bd-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.bd-actions:empty {
+  display: none;
+}
+.bd-form {
+  padding: 0.85rem;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+/* Header: the name and role stay on one line so the header keeps its height */
+.a-brand,
+.a-brand > span {
+  min-width: 0;
+}
+.a-brand small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.person .hbar-track {
+  display: block;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+.person .hbar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--brand);
+}
+.bm-row + .bm-row {
+  margin-top: 0.4rem;
 }

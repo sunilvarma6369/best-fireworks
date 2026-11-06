@@ -2,18 +2,20 @@
 //   kv       → cached price list, open bills, device code, bill counter
 //   photos   → item photo blobs, so search and scanning work without internet
 //   vectors  → image-recognition fingerprints of each photo (see vision.js)
-//   bills    → every saved bill; `synced: false` until it reaches Firestore
+//   bills    → every bill saved on this phone; `synced: false` until it reaches Firestore
+//   ledger   → bills from every phone, downloaded once each for the Bills list and Sales (see ledger.js)
 import { CapacitorHttp } from '@capacitor/core';
 import { isNativeApp } from '../lib/catalog.js';
 
 const DB_NAME = 'bfw-billing';
+const DB_VERSION = 2;
 let dbPromise;
 
 function openDb() {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
-      for (const name of ['kv', 'photos', 'vectors', 'bills']) {
+      for (const name of ['kv', 'photos', 'vectors', 'bills', 'ledger']) {
         if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name);
       }
     };
@@ -38,6 +40,11 @@ export const getItem = (store, key) => run(store, 'readonly', (s) => s.get(key))
 export const putItem = (store, key, value) => run(store, 'readwrite', (s) => s.put(value, key));
 export const deleteItem = (store, key) => run(store, 'readwrite', (s) => s.delete(key));
 export const allItems = (store) => run(store, 'readonly', (s) => s.getAll());
+export const clearStore = (store) => run(store, 'readwrite', (s) => s.clear());
+/** Writes many [key, value] pairs in one transaction. */
+export const putMany = (store, entries) => run(store, 'readwrite', (s) => {
+  for (const [key, value] of entries) s.put(value, key);
+});
 export const allKeys = (store) => run(store, 'readonly', (s) => s.getAllKeys());
 
 /** Quick fingerprint of what matters for billing, to skip work when nothing changed. */

@@ -1,10 +1,13 @@
 // Counter billing in the admin page / Best FireWorks app.
 // Works offline: the price list, photos and recognition data live on the phone (store.js, vision.js).
 // Firestore is touched only to upload a finished bill: one write per bill, retried until it gets through.
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+//
+// Screen: open bills (chips) · Scan | Search | Bill views · a fixed bar with the total and Checkout.
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { escapeHtml, indexPriceList, waLink } from '../lib/catalog.js';
 import { formatPaise, formatRupees, toPaise, toRupees, todayIST } from '../lib/money.js';
 import { computeTotals } from '../lib/pricing.js';
+import { nameForPhone, reloadLocal } from './ledger.js';
 import {
   allBills, deviceCode, getItem, loadCatalog, nextBillNo, photoBlobs, putItem, saveBill, saveCatalog, syncPhotos,
 } from './store.js';
@@ -12,10 +15,11 @@ import { isConfident, loadIndex, loadScanner, matchFrame, SURE_POINTS, syncVecto
 
 const $ = (sel) => document.querySelector(sel);
 const PAY = { upi: 'UPI', cash: 'Cash', card: 'Card' };
+const VIEWS = ['scan', 'search', 'bill'];
 const AUTO_INTERVAL = 700;
 
 const B = {
-  ctx: null, // { db, toast, getUser, openExternal }
+  ctx: null, // { db, toast, getStaff, openExternal, openBills }
   catalog: null,
   catalogSavedAt: null,
   photos: new Map(),
@@ -54,15 +58,22 @@ function feedback() {
   navigator.vibrate?.(35);
 }
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : word === 'box' ? 'es' : 's'}`;
 const activeBill = () => B.bills.find((b) => b.id === B.active);
 const product = (id) => B.catalog?.productsById.get(id);
 const thumb = (id) => B.urls.get(id) ?? product(id)?.image ?? null;
-const istTime = (iso) => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
 const istDay = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(iso));
+const thumbHtml = (id) => (thumb(id) ? `<img src="${escapeHtml(thumb(id))}" alt="" loading="lazy" />` : '<span class="bl-noimg"></span>');
 
 function billTotals(bill) {
   const qty = new Map(Object.entries(bill?.lines ?? {}).map(([id, n]) => [id, Number(n)]));
   return computeTotals(qty, B.catalog?.productsById ?? new Map(), B.catalog?.offer, new Set(), todayIST());
+}
+
+/** Bill lines, the most recently added first. */
+function recentLines(bill, t = billTotals(bill)) {
+  const touched = bill?.touched ?? {};
+  return t.lines.map((l, i) => ({ l, i })).sort((a, b) => (touched[b.l.product.id] ?? b.i) - (touched[a.l.product.id] ?? a.i)).map((x) => x.l);
 }
 
 // Open bills are saved on every change (a tiny local write), so nothing is lost if the app is closed right after a tap.
@@ -78,11 +89,18 @@ function saveOpenBills() {
 
 function newBill() {
   const n = Math.max(0, ...B.bills.map((b) => b.n)) + 1;
-  const bill = { id: crypto.randomUUID(), n, lines: {}, createdAt: new Date().toISOString() };
+  const bill = { id: crypto.randomUUID(), n, lines: {}, touched: {}, createdAt: new Date().toISOString() };
   B.bills.push(bill);
   B.active = bill.id;
   saveOpenBills();
   return bill;
+}
+
+function dropBill(id) {
+  B.bills = B.bills.filter((b) => b.id !== id);
+  if (!B.bills.length) newBill();
+  if (!B.bills.some((b) => b.id === B.active)) B.active = B.bills[B.bills.length - 1].id;
+  saveOpenBills();
 }
 
 // ── Price list, photos and scan data ───────────────────────
@@ -106,7 +124,7 @@ function syncStatus(text, busy = false) {
 function idleStatus() {
   const when = B.catalogSavedAt ? new Date(B.catalogSavedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : 'never';
   const withPhotos = B.catalog?.products.filter((p) => p.image).length ?? 0;
-  syncStatus(`${navigator.onLine ? '✓' : '⚠ Offline ·'} Prices from ${when} · ${B.scanReady}/${withPhotos} scannable`);
+  syncStatus(`${navigator.onLine ? '✓' : '⚠ Offline ·'} Prices ${when} · ${B.scanReady}/${withPhotos} scannable`);
 }
 
 /** Downloads changed photos and prepares them for scanning. Costs no Firestore reads. */
@@ -147,33 +165,63 @@ function renderBills() {
   $('#bl-bills').innerHTML = B.bills.map((b) => {
     const t = billTotals(b);
     const on = b.id === B.active;
-    return `<button type="button" class="bl-bill${on ? ' on' : ''}" data-bill="${b.id}">
+    return `<button type="button" class="bl-bill${on ? ' on' : ''}" data-bill="${b.id}" aria-pressed="${on}">
         <strong>Bill ${b.n}</strong><small>${t.itemCount ? `${t.itemCount} · ${formatPaise(t.netPayable)}` : 'empty'}</small>
       </button>`;
-  }).join('') + '<button type="button" class="bl-bill bl-new" data-bill="new">＋ New bill</button>';
+  }).join('') + '<button type="button" class="bl-bill bl-new" data-bill="new" aria-label="Start another bill">＋ New</button>';
 }
 
-function renderCart() {
-  const bill = activeBill();
-  const t = billTotals(bill);
-  $('#bl-count').textContent = t.itemCount ? `${t.itemCount} box${t.itemCount > 1 ? 'es' : ''}` : '';
-  $('#bl-cart').innerHTML = t.lines.length
-    ? t.lines.slice().reverse().map(({ product: p, qty, lineTotal }) => `<div class="bl-line${B.lastAdded === p.id ? ' flash' : ''}" data-id="${p.id}">
-        ${thumb(p.id) ? `<img src="${escapeHtml(thumb(p.id))}" alt="" />` : '<span class="bl-noimg"></span>'}
-        <div class="bl-line-info"><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.brand ?? '')} · ${formatRupees(p.finalPrice)}</small></div>
-        <div class="bl-step">
-          <button type="button" data-q="-1" aria-label="One less">−</button>
-          <input type="number" inputmode="numeric" min="0" value="${qty}" data-q="set" aria-label="Quantity" />
-          <button type="button" data-q="1" aria-label="One more">+</button>
-        </div>
-        <strong class="bl-line-total">${formatPaise(lineTotal)}</strong>
-      </div>`).join('')
-    : '<p class="muted bl-empty">Scan a box or search to add items.</p>';
+const stepperHtml = (qty) => `<div class="bl-step">
+    <button type="button" data-q="-1" aria-label="One less">−</button>
+    <input type="number" inputmode="numeric" min="0" value="${qty}" data-q="set" aria-label="Quantity" />
+    <button type="button" data-q="1" aria-label="One more">+</button>
+  </div>`;
+
+function lineHtml({ product: p, qty, lineTotal }) {
+  return `<div class="bl-line${B.lastAdded === p.id ? ' flash' : ''}" data-id="${p.id}">
+      ${thumbHtml(p.id)}
+      <div class="bl-line-info"><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.brand ?? '')} · ${formatRupees(p.finalPrice)}</small></div>
+      ${stepperHtml(qty)}
+      <strong class="bl-line-total">${formatPaise(lineTotal)}</strong>
+    </div>`;
+}
+
+/** Bottom bar and the Bill tab's count: always visible, whatever the view. */
+function renderBar(t) {
   $('#bl-total').textContent = formatPaise(t.netPayable);
   $('#bl-meta').textContent = t.itemCount
-    ? `${t.lines.length} item${t.lines.length > 1 ? 's' : ''} · saves ${formatPaise(t.discountTotal + t.bulkDiscount)}`
+    ? `${plural(t.lines.length, 'item')} · saves ${formatPaise(t.discountTotal + t.bulkDiscount)} · view bill`
     : 'No items yet';
   $('#bl-checkout').disabled = !t.itemCount;
+  const badge = $('#bl-seg-count');
+  badge.textContent = t.itemCount;
+  badge.hidden = !t.itemCount;
+}
+
+function renderBillView(bill, t) {
+  $('#bl-bill-title').textContent = `Bill ${bill?.n ?? ''}`;
+  $('#bl-count').textContent = t.itemCount ? `${plural(t.itemCount, 'box')} · ${plural(t.lines.length, 'item')}` : '';
+  $('#bl-cart').innerHTML = t.lines.length
+    ? recentLines(bill, t).map(lineHtml).join('')
+    : `<div class="bl-empty-bill"><p class="muted">This bill is empty.</p>
+        <div class="d-row-btns"><button type="button" class="btn btn-soft" data-bl-view="scan">📷 Scan a box</button>
+        <button type="button" class="btn btn-soft" data-bl-view="search">🔍 Search items</button></div></div>`;
+  $('#bl-sum-mini').innerHTML = t.itemCount ? `<div class="bl-sum">
+      <div><span>Amount</span><span>${formatPaise(t.amountTotal)}</span></div>
+      <div class="save"><span>Discount</span><span>−${formatPaise(t.discountTotal)}</span></div>
+      ${t.bulkDiscount ? `<div class="save"><span>Bulk offer</span><span>−${formatPaise(t.bulkDiscount)}</span></div>` : ''}
+      <div class="net"><span>Bill total</span><span>${formatPaise(t.netPayable)}</span></div>
+    </div>` : '';
+  $('#bl-drop').hidden = B.bills.length < 2 && !t.itemCount;
+}
+
+function renderRecent(bill, t) {
+  const recent = recentLines(bill, t).slice(0, 3);
+  $('#bl-recent').innerHTML = recent.length
+    ? `<div class="bl-recent-head"><h3>Last added</h3>
+        <button type="button" class="link" data-bl-view="bill">Whole bill · ${plural(t.lines.length, 'item')} →</button></div>
+      ${recent.map(lineHtml).join('')}`
+    : '';
 }
 
 function renderSearch() {
@@ -185,11 +233,17 @@ function renderSearch() {
   const lines = activeBill()?.lines ?? {};
   const list = B.catalog.products.filter((p) => (B.cat === 'all' || p.categoryId === B.cat)
     && tokens.every((t) => `${p.name} ${p.brand ?? ''} ${p.listNo} ${p.category}`.toLowerCase().includes(t)));
-  $('#bl-grid').innerHTML = list.slice(0, 200).map((p) => `<button type="button" class="bl-item" data-add="${p.id}">
-      ${thumb(p.id) ? `<img src="${escapeHtml(thumb(p.id))}" alt="" loading="lazy" />` : '<span class="bl-noimg"></span>'}
-      <span class="bl-item-info"><strong>${escapeHtml(p.name)}</strong><small>#${p.listNo} · ${escapeHtml(p.brand ?? '')}</small></span>
-      <span class="bl-item-price">${formatRupees(p.finalPrice)}${lines[p.id] ? `<em>×${lines[p.id]}</em>` : ''}</span>
-    </button>`).join('') || '<p class="muted bl-empty">No items match.</p>';
+  $('#bl-grid').innerHTML = list.slice(0, 200).map((p) => {
+    const qty = lines[p.id] ?? 0;
+    return `<div class="bl-item${qty ? ' in-bill' : ''}" data-id="${p.id}" data-add="${p.id}" role="button" tabindex="0" aria-label="Add ${escapeHtml(p.name)}">
+        ${thumbHtml(p.id)}
+        <span class="bl-item-info"><strong>${escapeHtml(p.name)}</strong>
+          <small>#${p.listNo} · ${escapeHtml(p.brand ?? '')}</small>
+          <b class="bl-price">${formatRupees(p.finalPrice)}${p.amount > p.finalPrice ? ` <s>${formatRupees(p.amount)}</s>` : ''}</b></span>
+        ${qty ? stepperHtml(qty) : '<span class="bl-plus" aria-hidden="true">＋</span>'}
+      </div>`;
+  }).join('') || '<p class="muted bl-empty">No items match.</p>';
+  $('#bl-results-note').textContent = list.length > 200 ? `Showing 200 of ${list.length}. Type more to narrow down.` : '';
 }
 
 function renderMatches(matches, note = '') {
@@ -212,12 +266,28 @@ function renderMatches(matches, note = '') {
 
 function renderAll() {
   if (!B.opened) return;
+  const bill = activeBill();
+  const t = billTotals(bill);
   renderBills();
-  renderCart();
-  renderSearch();
-  document.querySelectorAll('[data-bl-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.blView === B.view)));
+  renderBar(t);
+  document.querySelectorAll('.bl-seg [data-bl-view]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.blView === B.view)));
   $('#bl-scan').hidden = B.view !== 'scan';
   $('#bl-search').hidden = B.view !== 'search';
+  $('#bl-billview').hidden = B.view !== 'bill';
+  if (B.view === 'scan') renderRecent(bill, t);
+  if (B.view === 'search') renderSearch();
+  if (B.view === 'bill') renderBillView(bill, t);
+}
+
+function setView(view) {
+  if (!VIEWS.includes(view)) return;
+  const changed = B.view !== view;
+  B.view = view;
+  renderAll();
+  if (view === 'scan') startCamera();
+  else stopCamera();
+  if (changed) window.scrollTo({ top: $('#tab-billing').offsetTop - 8, behavior: 'instant' });
+  if (view === 'search' && changed) setTimeout(() => $('#bl-q').focus(), 50);
 }
 
 // ── Cart actions ───────────────────────────────────────────
@@ -227,22 +297,19 @@ function addItem(id, n = 1, { quiet = false } = {}) {
   const bill = activeBill() ?? newBill();
   bill.lines[id] = (bill.lines[id] ?? 0) + n;
   if (bill.lines[id] <= 0) delete bill.lines[id];
-  B.lastAdded = id;
+  else if (n > 0) (bill.touched ??= {})[id] = Date.now();
+  B.lastAdded = n > 0 ? id : null;
   saveOpenBills();
-  renderBills();
-  renderCart();
-  renderSearch();
+  renderAll();
   if (!quiet) {
     feedback();
-    showUndo(p);
+    if (B.view === 'scan') showUndo(p); // in Search the row itself shows the new quantity
   }
 }
 
 let undoTimer;
 function showUndo(p) {
   const el = $('#bl-added');
-  const host = B.view === 'scan' ? $('.bl-camera') : $('#tab-billing');
-  if (el.parentElement !== host) host.appendChild(el);
   el.innerHTML = `<span>✓ Added <strong>${escapeHtml(p.name)}</strong></span><button type="button" data-undo="${p.id}">Undo</button>`;
   el.hidden = false;
   clearTimeout(undoTimer);
@@ -252,12 +319,30 @@ function showUndo(p) {
 function setQty(id, qty) {
   const bill = activeBill();
   if (!bill) return;
-  const n = Math.max(0, Math.floor(Number(qty) || 0));
+  const n = Math.max(0, Math.min(9999, Math.floor(Number(qty) || 0)));
   if (n) bill.lines[id] = n;
   else delete bill.lines[id];
+  B.lastAdded = null;
   saveOpenBills();
-  renderBills();
-  renderCart();
+  renderAll();
+}
+
+/** "Cancel & re-bill" from the Bills list: a new open bill with the same items, ready to fix and check out. */
+export function startBillFrom(items) {
+  const bill = newBill();
+  let missing = 0;
+  for (const it of items ?? []) {
+    if (!product(it.id)) {
+      missing++;
+      continue;
+    }
+    bill.lines[it.id] = (bill.lines[it.id] ?? 0) + Number(it.qty || 0);
+    bill.touched[it.id] = Date.now();
+  }
+  B.view = 'bill';
+  saveOpenBills();
+  renderAll();
+  if (missing) B.ctx.toast(`${plural(missing, 'item')} no longer in the price list ${missing === 1 ? 'was' : 'were'} left out.`);
 }
 
 // ── Camera scanning ────────────────────────────────────────
@@ -280,6 +365,7 @@ async function startCamera() {
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: false,
     });
+    if (B.view !== 'scan' || $('#tab-billing').hidden) return stopCamera(); // left the screen while it started
     const v = $('#bl-video');
     v.srcObject = B.stream;
     await v.play();
@@ -379,9 +465,10 @@ function checkoutHtml(t) {
         ${Object.entries(PAY).map(([k, v]) => `<label><input type="radio" name="payment" value="${k}" ${k === lastPayment ? 'checked' : ''} /> ${v}</label>`).join('')}
       </fieldset>
       <div class="two-col">
-        <label>Customer name <small>(optional)</small><input name="name" maxlength="60" autocomplete="off" /></label>
         <label>Mobile <small>(for WhatsApp)</small><input name="phone" inputmode="numeric" maxlength="10" autocomplete="off" /></label>
+        <label>Customer name <small>(optional)</small><input name="name" maxlength="60" autocomplete="off" /></label>
       </div>
+      <p class="fine" id="bl-returning" hidden></p>
       <label class="switch"><input type="checkbox" name="wa" checked /> Send the bill on WhatsApp after saving</label>
       <p class="a-error" id="bl-pay-error" hidden></p>
       <button class="btn btn-primary btn-block bl-save" type="submit">Save bill</button>
@@ -408,7 +495,14 @@ function openCheckout() {
   const f = $('#bl-pay-form');
   updateAdjust(t);
   f.addEventListener('input', (e) => {
-    if (e.target.name === 'phone') e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+    if (e.target.name === 'phone') {
+      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+      // A returning customer: fill in the name used last time.
+      const known = e.target.value.length === 10 ? nameForPhone(e.target.value) : '';
+      if (known && !f.name.value.trim()) f.name.value = known;
+      $('#bl-returning').hidden = !known;
+      $('#bl-returning').textContent = known ? `Returning customer: ${known}` : '';
+    }
     updateAdjust(t);
   });
   f.addEventListener('click', (e) => {
@@ -431,14 +525,14 @@ function openCheckout() {
   });
 }
 
-function billMessage(bill) {
+export function billMessage(bill) {
   const t = bill.totals;
   const lines = bill.items.map((it, i) => `${i + 1}. ${it.name}${it.brand ? ` (${it.brand})` : ''} × ${it.qty} = ${formatRupees(it.lineTotal)}`);
   const when = new Date(bill.billedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
   return [
     '*Best FireWorks* 🎆',
     `Bill ${bill.billNo} · ${when}`,
-    bill.customer.name ? `Customer: ${bill.customer.name}` : null,
+    bill.customer?.name ? `Customer: ${bill.customer.name}` : null,
     '',
     ...lines,
     '',
@@ -455,9 +549,9 @@ function billMessage(bill) {
   ].filter((l) => l !== null).join('\n');
 }
 
-const whatsappUrl = (bill) => {
+export const whatsappUrl = (bill) => {
   const text = billMessage(bill);
-  const phone = bill.customer.phone;
+  const phone = bill.customer?.phone;
   return phone ? waLink(`+91${phone}`, text) : `https://wa.me/?text=${encodeURIComponent(text)}`;
 };
 
@@ -482,14 +576,18 @@ async function saveCurrentBill(t, f) {
   btn.disabled = true;
   const payment = f.payment.value || 'cash';
   lastPayment = payment;
-  const user = B.ctx.getUser();
+  const staff = B.ctx.getStaff();
+  const billedAt = new Date().toISOString();
   const bill = {
     billNo: await nextBillNo(),
-    billedAt: new Date().toISOString(),
+    billedAt,
+    day: istDay(billedAt),
     device: await deviceCode(),
-    cashier: user?.email ?? '',
+    cashierUid: staff?.uid ?? '',
+    cashierName: staff?.name ?? '',
     customer: { name: f.name.value.trim().slice(0, 60), phone },
     payment,
+    status: 'ok',
     items: t.lines.map(({ product: p, qty, lineTotal }) => ({
       id: p.id, listNo: p.listNo, name: p.name, brand: p.brand ?? '', qty,
       amount: p.amount, finalPrice: p.finalPrice, lineTotal: toRupees(lineTotal),
@@ -514,12 +612,13 @@ async function saveCurrentBill(t, f) {
     err.hidden = false;
     return;
   }
+  reloadLocal();
   // Close this bill and move to the next open one (or a fresh one)
-  B.bills = B.bills.filter((b) => b.id !== B.active);
-  B.active = B.bills[0]?.id ?? newBill().id;
-  saveOpenBills();
+  dropBill(B.active);
+  B.view = B.view === 'bill' ? 'scan' : B.view;
   $('#bl-checkout-dialog').close();
   renderAll();
+  if (B.view === 'scan') startCamera();
   upload(bill);
   if (f.wa.checked) B.ctx.openExternal(whatsappUrl(bill));
   showDone(bill);
@@ -545,53 +644,57 @@ function showDone(bill) {
 }
 
 // ── Upload (one Firestore write per bill) ──────────────────
-function upload(bill) {
-  if (B.uploading.has(bill.billNo)) return;
-  B.uploading.add(bill.billNo);
-  const { synced, ...data } = bill;
+/** What goes to Firestore. Older app versions saved bills without the salesperson's id; fill it in. */
+function payloadOf(bill) {
+  const { synced, cashier, ...data } = bill;
   void synced;
+  const staff = B.ctx.getStaff();
+  return {
+    ...data,
+    cashierUid: data.cashierUid || staff?.uid || '',
+    cashierName: data.cashierName || cashier || staff?.name || '',
+    day: data.day || istDay(data.billedAt),
+    status: data.status === 'void' ? 'void' : 'ok',
+    source: 'counter',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+function upload(bill) {
+  if (B.uploading.has(bill.billNo) || !B.ctx.getStaff()) return;
+  B.uploading.add(bill.billNo);
+  const ref = doc(B.ctx.db, 'sales', bill.billNo);
+  const done = async () => {
+    bill.synced = true;
+    await saveBill(bill);
+    await reloadLocal();
+    const note = $('#bl-done-sync');
+    if (note && $('#bl-done-dialog').open) note.textContent = 'Uploaded.';
+  };
   // If offline, Firestore keeps this write and sends it when the internet is back (while the app stays open).
-  setDoc(doc(B.ctx.db, 'sales', bill.billNo), { ...data, source: 'counter', createdAt: serverTimestamp() })
-    .then(async () => {
-      bill.synced = true;
-      await saveBill(bill);
-      const note = $('#bl-done-sync');
-      if (note && $('#bl-done-dialog').open) note.textContent = 'Uploaded.';
-      if ($('#bl-today-dialog').open) renderToday();
+  setDoc(ref, payloadOf(bill))
+    .then(done)
+    .catch(async (e) => {
+      // Uploaded earlier but the reply never arrived? Then the bill is already there and is done.
+      if (e?.code === 'permission-denied') {
+        const snap = await getDoc(ref).catch(() => null);
+        if (snap?.exists()) return done();
+      }
+      console.warn('Bill upload failed, will retry', bill.billNo, e);
     })
-    .catch((e) => console.warn('Bill upload failed, will retry', bill.billNo, e))
     .finally(() => B.uploading.delete(bill.billNo));
 }
 
-/** Uploads bills saved while offline (or before the app was closed). */
+/** Uploads bills saved while offline (or before the app was closed). Returns how many were waiting. */
 export async function flushPending() {
   const pending = (await allBills()).filter((b) => !b.synced);
   pending.forEach(upload);
   return pending.length;
 }
 
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : word === 'box' ? 'es' : 's'}`;
-
-// ── Today's bills ──────────────────────────────────────────
-async function renderToday() {
-  const today = todayIST();
-  const bills = (await allBills()).filter((b) => istDay(b.billedAt) === today).sort((a, b) => b.billedAt.localeCompare(a.billedAt));
-  const sum = (list) => list.reduce((s, b) => s + toPaise(b.totals.paid), 0);
-  const byMode = Object.keys(PAY).map((k) => [k, bills.filter((b) => b.payment === k)]);
-  const pending = bills.filter((b) => !b.synced).length;
-  $('#bl-today-dialog').innerHTML = `<div class="d-head"><h2>Today's bills</h2><button class="close" type="button" data-act="close" aria-label="Close">✕</button></div>
-    <div class="d-body">
-      <div class="kpis">
-        <div class="kpi"><small>Collected</small><strong>${formatPaise(sum(bills))}</strong><span>${plural(bills.length, 'bill')} on this phone</span></div>
-        ${byMode.map(([k, list]) => `<div class="kpi"><small>${PAY[k]}</small><strong>${formatPaise(sum(list))}</strong><span>${plural(list.length, 'bill')}</span></div>`).join('')}
-      </div>
-      <p class="${pending ? 'hint' : 'ok'}">${pending ? `${pending} bill${pending > 1 ? 's' : ''} waiting to upload (they upload by themselves when online).` : '✓ All bills uploaded.'}</p>
-      <div class="bl-history">${bills.map((b) => `<div class="bl-hrow">
-          <div><strong>${escapeHtml(b.billNo)}</strong><small>${istTime(b.billedAt)} · ${plural(b.totals.itemCount, 'box')} · ${PAY[b.payment]}${b.customer.name ? ` · ${escapeHtml(b.customer.name)}` : ''}</small></div>
-          <div class="bl-hright"><strong>${formatRupees(b.totals.paid)}</strong><small>${b.synced ? '✓ uploaded' : '⏳ on phone'}</small></div>
-          <a class="btn btn-sm btn-soft" href="${whatsappUrl(b)}" target="_blank" rel="noopener" aria-label="Send on WhatsApp">💬</a>
-        </div>`).join('') || '<p class="muted">No bills yet today.</p>'}</div>
-    </div>`;
+export async function pendingCount() {
+  return (await allBills().catch(() => [])).filter((b) => !b.synced).length;
 }
 
 // ── Setup ──────────────────────────────────────────────────
@@ -624,7 +727,7 @@ export async function setupBilling(ctx) {
   B.ctx = ctx;
   const open = await getItem('kv', 'openBills').catch(() => null);
   if (open?.bills?.length) {
-    B.bills = open.bills;
+    B.bills = open.bills.map((b) => ({ touched: {}, ...b }));
     B.active = open.bills.some((b) => b.id === open.active) ? open.active : open.bills[0].id;
   }
   B.auto = localStorage.getItem('bfw.billing.auto') === '1';
@@ -635,36 +738,32 @@ export async function setupBilling(ctx) {
     const t = e.target;
     const billBtn = t.closest('[data-bill]');
     if (billBtn) {
-      if (billBtn.dataset.bill === 'new') newBill();
-      else if (billBtn.dataset.bill === B.active && !Object.keys(activeBill().lines).length && B.bills.length > 1) {
-        B.bills = B.bills.filter((b) => b.id !== B.active); // tapping an empty selected bill closes it
-        B.active = B.bills[0].id;
-        saveOpenBills();
+      if (billBtn.dataset.bill === 'new') {
+        newBill();
+        if (B.view === 'bill') B.view = 'scan';
+      } else if (billBtn.dataset.bill === B.active && !Object.keys(activeBill().lines).length && B.bills.length > 1) {
+        dropBill(B.active); // tapping an empty selected bill closes it
       } else B.active = billBtn.dataset.bill;
       saveOpenBills();
       renderAll();
+      if (B.view === 'scan') startCamera();
       return;
     }
     const view = t.closest('[data-bl-view]');
-    if (view) {
-      B.view = view.dataset.blView;
-      renderAll();
-      if (B.view === 'scan') startCamera();
-      else stopCamera();
-      if (B.view === 'search') setTimeout(() => $('#bl-q').focus(), 50);
-      return;
+    if (view) return setView(view.dataset.blView);
+    // Quantity steppers come before "add", because they sit inside a search result that adds on tap.
+    const q = t.closest('[data-q]');
+    if (q && q.tagName === 'BUTTON') {
+      const id = q.closest('[data-id]').dataset.id;
+      return setQty(id, (activeBill().lines[id] ?? 0) + Number(q.dataset.q));
     }
+    if (t.closest('.bl-step')) return; // tapping the number box just edits it
     const add = t.closest('[data-add]');
     if (add) return addItem(add.dataset.add);
     const cat = t.closest('[data-cat]');
     if (cat && t.closest('#bl-cats')) {
       B.cat = cat.dataset.cat;
       return renderSearch();
-    }
-    const q = t.closest('[data-q]');
-    if (q && q.tagName === 'BUTTON') {
-      const id = q.closest('[data-id]').dataset.id;
-      return setQty(id, (activeBill().lines[id] ?? 0) + Number(q.dataset.q));
     }
     const undo = t.closest('[data-undo]');
     if (undo) {
@@ -675,14 +774,32 @@ export async function setupBilling(ctx) {
     if (t.closest('#bl-shutter')) return scanOnce();
     if (t.closest('#bl-checkout')) return openCheckout();
     if (t.closest('#bl-sync')) return syncNow();
-    if (t.closest('#bl-today-btn')) {
-      renderToday().then(() => $('#bl-today-dialog').showModal());
-      return;
-    }
-    if (t.closest('#bl-clear') && activeBill() && confirm('Remove all items from this bill?')) {
-      activeBill().lines = {};
-      saveOpenBills();
+    if (t.closest('#bl-bills-btn')) return B.ctx.openBills();
+    if (t.closest('#bl-hold')) {
+      newBill();
+      B.view = 'scan';
       renderAll();
+      startCamera();
+      return B.ctx.toast('Bill kept on hold. Tap its chip at the top to go back to it.');
+    }
+    if (t.closest('#bl-clear') && activeBill() && Object.keys(activeBill().lines).length && confirm('Remove all items from this bill?')) {
+      activeBill().lines = {};
+      activeBill().touched = {};
+      saveOpenBills();
+      return renderAll();
+    }
+    if (t.closest('#bl-drop')) {
+      const bill = activeBill();
+      if (Object.keys(bill?.lines ?? {}).length && !confirm(`Delete Bill ${bill.n} and its items?`)) return;
+      dropBill(B.active);
+      renderAll();
+    }
+  });
+  panel.addEventListener('keydown', (e) => {
+    const row = e.target.closest?.('.bl-item[data-add]');
+    if (row && e.target === row && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      addItem(row.dataset.add);
     }
   });
   panel.addEventListener('change', (e) => {
@@ -699,7 +816,7 @@ export async function setupBilling(ctx) {
     B.q = e.target.value.trim();
     renderSearch();
   });
-  for (const id of ['#bl-checkout-dialog', '#bl-done-dialog', '#bl-today-dialog']) {
+  for (const id of ['#bl-checkout-dialog', '#bl-done-dialog']) {
     const dlg = $(id);
     dlg.addEventListener('click', (e) => {
       if (e.target === dlg || e.target.closest('[data-act="close"]')) dlg.close();

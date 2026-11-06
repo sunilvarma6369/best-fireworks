@@ -97,6 +97,10 @@
     "storage": {
       "host": "0.0.0.0",
       "port": 9199
+    },
+    "functions": {
+      "host": "0.0.0.0",
+      "port": 5001
     }
   },
   "functions": [

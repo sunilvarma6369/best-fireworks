@@ -6,9 +6,9 @@ Website and Android app for **Best FireWorks** (Sivakasi Factory Outlet, Bachupa
 |---|---|
 | `/` | Price list (Standard / Other Brands), search, cart, 10% bulk offer, booking form |
 | `/track?code=BFW-XXXXXX` | Order status for the customer (no login, no personal details shown) |
-| `/admin` (and the BFW Admin app) | Shop login: live orders with sound and notification alerts, status updates with WhatsApp messages, 🧾 counter billing (offline, scan or search, WhatsApp bill), 📊 sales dashboard, item and price editor, sold-out items, home-delivery switch, pause bookings, CSV export |
+| `/admin` (and the Android app) | Shop login (username + password; roles: super admin, admin, sales): live orders with sound and notification alerts, status updates with WhatsApp messages, 🧾 counter billing (offline, scan or search, WhatsApp bill, bills list with corrections), 📊 sales for counter and online by salesperson, item and price editor, 👥 users, sold-out items, home-delivery switch, pause bookings, CSV export |
 
-**Built with:** plain HTML/CSS/JS with Vite, Firebase (Firestore, Auth, Hosting, optional Cloud Function for push), and Capacitor for the Android APK. GitHub Actions deploys the website and builds the APK.
+**Built with:** plain HTML/CSS/JS with Vite, Firebase (Firestore, Auth, Hosting, Cloud Functions for push notifications and the Users tab), and Capacitor for the Android APK. GitHub Actions deploys the website and builds the APK.
 
 ---
 
@@ -45,12 +45,18 @@ The website is **https://bestfireworks.web.app**. `best-fireworks.web.app` and `
    firebase deploy --only firestore
    ```
 
-### 2. Shop logins
-1. **Authentication → Users → Add user**: enter the owner's email and a password.
-2. Open `https://bestfireworks.web.app/admin` and sign in. The page shows a **user ID**. Copy it.
-3. **Firestore → Start collection** `admins` → Document ID = that user ID → add a field `name` (string) = the owner's name. Reload the admin page.
+### 2. Shop logins and roles
+There is no sign-up page. The **super admin** adds everyone else in the app: **👥 Users → ＋ Add user** (name, username, password, role). Staff then sign in with just the username and password. Behind the scenes a username becomes `<username>@staff.bestfireworks.web.app` in Firebase Auth; no email is ever sent.
 
-Repeat for each staff member.
+| Role | Can do |
+|---|---|
+| **Sales** | Billing, online orders, and only their own sales and bills ("My sales"). Can cancel or fix their own bill for 30 minutes. |
+| **Admin** | Everything sales can do, plus everyone's sales (counter and online, by salesperson), cancelling or restoring any bill, items & prices, PDF settings, shop settings. |
+| **Super admin** | Everything, plus the Users tab: add people, set passwords, change roles, switch logins off, delete logins. |
+
+Roles live in Firestore `admins/{uid}` (`name`, `role` = `super` / `admin` / `sales`, `active`). A login without a `role` counts as an admin. `firestore.rules` enforces every limit on the server, and the **staffUsers** Cloud Function (`functions/index.js`) makes the changes, because only the server can set other people's passwords. It refuses to remove the last super admin, and a super admin cannot demote or delete themself. Switching a login off signs that person out straight away and stops order notifications on their phone.
+
+**The very first login** (only if the project has no super admin yet): Firebase console → **Authentication → Add user** (email + password) → sign in to the admin page, copy the **user ID** it shows → **Firestore** → collection `admins` → document with that ID → fields `name` (your name) and `role` = `super`. Reload.
 
 ### 3. GitHub
 1. Create a **public** repository named `best-fireworks`. Public repos get **unlimited free GitHub Actions minutes** (private repos only get a monthly quota), and customers never see GitHub: the staff APK is shared through Google Drive. The code holds no secrets: the Firebase web config is public by design, and the signing key and service account go in GitHub Secrets.
@@ -97,7 +103,13 @@ Keep `bestfireworks.jks` and its passwords safe and **out of git** (`.gitignore`
 
 The app loads the latest price list from the website each time it opens, so price corrections reach the app without a new APK.
 
-### 6. New-order notifications when the app is closed (needs Blaze)
+### 6. Server parts: rules, indexes, Cloud Functions (needs Blaze)
+GitHub only deploys the website. After changing `firestore.rules`, `firestore.indexes.json`, `storage.rules` or `functions/`, run once from this PC:
+```bash
+npm run deploy:backend
+```
+
+### 7. New-order notifications when the app is closed (needs Blaze)
 While the app or admin page is open, new orders ring straight away. To get a notification **even when the app is closed or the phone is locked**, the Cloud Function in `functions/` sends one per order, and that needs the **Blaze** (pay-as-you-go) plan. A shop's volume stays inside the free monthly quota, but a billing account is required. Set a small budget alert under Google Cloud → Billing → Budgets.
 1. Firebase console → **Upgrade** → Blaze.
 2. `npm run deploy:functions`
@@ -119,18 +131,29 @@ While the app or admin page is open, new orders ring straight away. To get a not
 - Customers can book for any day from today.
 
 ## Counter billing (in the app)
-Admin → **🧾 Billing**. Made for the stall: quick bills, several at once, and it keeps working without internet.
+**🧾 Billing**. Made for the stall: quick bills, several at once, and it keeps working without internet.
+
+The screen has three views, switched with the bar at the top (it stays on screen while you scroll):
+- **📷 Scan**: hold the box inside the square and tap **📷 Scan item**. A sure match is added straight away (with Undo); otherwise the closest items are shown to tap. Turn on **Auto** to add each box held steady in front of the camera. The last 3 items added show under the camera.
+- **🔍 Search**: by name, brand or item number, or by category. Tap a result to add it; items already on the bill show **− qty +** right on the result.
+- **🧾 Bill**: the whole bill with quantities, totals, **Hold & start a new bill**, Clear, Delete.
+
+The bar at the bottom always shows the total; tap it to see the bill, or tap **Checkout**.
 
 - **Offline price list.** The first time, Billing saves the prices, items and item photos on the phone and prepares them for scanning. After that it downloads only what changed: price edits arrive with the settings the app already loads (1 read when the app opens), and a photo is downloaded again only if it was replaced. Tap the sync line to check by hand.
-- **Add items.** **📷 Scan**: hold the box inside the square and tap **📷 Scan item**. A sure match is added straight away; otherwise the closest items are shown to tap. Turn on **Auto** to add each box you hold steady in front of the camera, one after another. **🔍 Search** finds by name, brand or item number, or by category.
-- **Scanning needs a photo of the item.** Items & prices → Edit → **Take photo**. Photograph the front of the box filling the frame. Items without a photo can still be found with Search. Scanning runs on the phone (OpenCV, about 11 MB inside the app), so it needs no internet and costs nothing.
-- **Several bills at once.** **＋ New bill** starts another bill. Tap a bill chip to switch. Unfinished bills stay on the phone even if the app is closed.
-- **Checkout.** Shows the final bill (item discounts and the bulk offer, as on the website). Enter the **amount collected**, or tap exact, round down to ₹10 or ₹50, −5% or −10%; the difference is shown as the adjustment. Choose **UPI**, **Cash** or **Card**. Customer name and phone are optional.
-- **Save = 1 write.** The bill is saved on the phone first, then sent as a single Firestore document, `sales/{billNo}`. Bills saved offline are sent automatically when the phone is back online. Bill numbers are a 3-letter code per phone plus a running number, like `KMP-0001`, so two phones never clash.
+- **How scanning recognises a box.** For every item photo the phone stores a colour fingerprint and about 300 small "feature points" (distinctive corners and patterns of the printed artwork). A scan picks the 30 items with the closest colours, matches the camera's feature points against theirs, and checks that the matching points line up as the same picture seen at an angle (OpenCV: ORB features + RANSAC). At least 12 points that line up, and twice as many as the next item, count as a sure match. It runs on the phone (about 0.25 s, no internet, no cost). It needs a photo of each item: Items & prices → Edit → **Take photo**, with the front of the box filling the frame.
+- **Several bills at once.** **＋ New** starts another bill. Tap a bill chip to switch. Unfinished bills stay on the phone even if the app is closed.
+- **Checkout.** Shows the final bill (item discounts and the bulk offer, as on the website). Enter the **amount collected**, or tap exact, round down to ₹10 or ₹50, −5% or −10%; the difference is shown as the adjustment. Choose **UPI**, **Cash** or **Card**. Customer phone and name are optional; a returning customer's name fills in from their phone number.
+- **Save = 1 write.** The bill is saved on the phone first, then sent as one Firestore document, `sales/{billNo}`, with who billed it. Bills saved offline are sent automatically when the phone is back online. Bill numbers are a 3-letter code per phone plus a running number, like `KMP-0001`, so two phones never clash.
 - **WhatsApp bill.** On save, WhatsApp opens with the items and prices, discount, bill total, adjustment, **total paid** with the payment mode, and a thank-you and Happy Diwali message. With a customer number it goes straight to their chat.
-- **📒 Today's bills** shows today's total collected by UPI, cash and card, bills still waiting to upload, and a 💬 button to send any bill again.
-- **Counter-only phone.** Settings → "This phone is a billing counter". The app opens on Billing and skips the online-orders list and order alerts, so it uses even less data. Untick it to get orders back.
-- Billing staff sign in with a normal shop login (see *Shop logins*).
+- **📒 Bills** (Billing or Sales tab): every counter bill (sales staff: their own), searchable by bill number, customer name or phone, filtered by date, salesperson, payment and status, with day totals by UPI, cash and card. Tap a bill to see it in full, send it on WhatsApp again, **fix the payment mode or customer**, **cancel** it with a reason, or **cancel & re-bill** (its items go into a new bill to correct and check out again). Cancelled bills stay in the list and are left out of every total; an admin can restore them. Bills are never deleted.
+- **Counter-only phone.** Settings → "This phone is a billing counter". The app opens on Billing and skips the online-orders list and order alerts.
+
+**Reads and writes.** Each bill is 1 write; each correction is 1 write. The Bills list and Sales download each bill once per phone and afterwards only new or changed bills (while one of them is open, new bills from other counters appear by themselves). Sales staff phones open on Billing and load the online orders only when the Orders tab is opened.
+
+## Sales tab
+- **Admins:** **All sales** (counter + online together), **🧾 Counter** or **🌐 Online**, for today, yesterday, the last 7 days or the whole season. Shows totals, where sales came from, counter payments (UPI / cash / card), **by salesperson** (tap a person to see their bills), discounts and counter adjustments given, cancelled bills, busiest hours, best-selling items and categories. **⬇ Bills (CSV)**, **⬇ item sales (CSV)** and **💬 Share report** (a WhatsApp summary for the owner).
+- **Sales staff:** **📊 My sales**: their own counter sales, cash to hand over, UPI and card, their bills, and **💬 Share my day**.
 
 ## How orders flow
 1. The customer books and gets two codes:

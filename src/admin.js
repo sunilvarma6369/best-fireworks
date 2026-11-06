@@ -2,9 +2,10 @@ import {
   connectAuthEmulator, getAuth, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signOut,
 } from 'firebase/auth';
 import {
-  arrayRemove, arrayUnion, collection, connectFirestoreEmulator, deleteField, doc, FieldPath, getDoc, getFirestore, limit,
+  arrayRemove, arrayUnion, collection, connectFirestoreEmulator, deleteField, doc, FieldPath, getFirestore, limit,
   onSnapshot, orderBy, query, serverTimestamp, setDoc, Timestamp, writeBatch,
 } from 'firebase/firestore';
+import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 import { connectStorageEmulator, deleteObject, getDownloadURL, getStorage, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { App as CapApp } from '@capacitor/app';
@@ -17,17 +18,27 @@ import { cleanCodeInput, newOrderCode, normalizeOrderCode } from './lib/codes.js
 import { app, EMULATOR_HOST, useEmulators } from './lib/firebase-app.js';
 import { formatDate, formatDateTime, formatPaise, formatRupees, toPaise } from './lib/money.js';
 import { computeTotals } from './lib/pricing.js';
-import { computeSales, BASES, RANGES } from './lib/sales.js';
+import { computeCounter, computeSales, BASES, RANGES } from './lib/sales.js';
+import { isAdminRole, loginEmail, ROLES, staffFromDoc } from './lib/staff.js';
 import { STATUS } from './lib/status.js';
-import { itemSalesCsv, renderChips, renderDashboard } from './dashboard.js';
+import {
+  billsCsv, CHANNELS, itemSalesCsv, renderAllSales, renderChips, renderCounterSales, renderDashboard, salesReportText,
+} from './dashboard.js';
 import { openPdfTab, setupPdfTab } from './admin-pdf.js';
-import { billingCatalogChanged, closeBilling, openBilling, setupBilling } from './billing/billing.js';
+import {
+  billingCatalogChanged, closeBilling, openBilling, pendingCount, setupBilling, startBillFrom, whatsappUrl,
+} from './billing/billing.js';
+import { openBillsManager, setupBillsManager } from './billing/bills-ui.js';
+import { initLedger, ledgerBills, ledgerStatus, onLedger, retryLedger, watchLedger } from './billing/ledger.js';
+import { openUsersTab, setupUsersTab } from './users.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const db = app ? getFirestore(app) : null;
 const auth = app ? getAuth(app) : null;
 const storage = app ? getStorage(app) : null;
+const functions = app ? getFunctions(app, 'asia-south1') : null;
 if (useEmulators) {
+  connectFunctionsEmulator(functions, EMULATOR_HOST, 5001);
   connectStorageEmulator(storage, EMULATOR_HOST, 9199);
   connectFirestoreEmulator(db, EMULATOR_HOST, 8080);
   connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
@@ -40,6 +51,8 @@ const prefs = { sound: true, repeat: true, wake: false, counter: false, ...readJ
 
 const state = {
   user: null,
+  staff: null, // { uid, name, role: 'super' | 'admin' | 'sales', active, username } from admins/{uid}
+  ordersOn: false, // online orders listener started (sales phones start it only when Orders is opened)
   base: null, // price-list file as loaded
   catalog: null, // base + the shop's edits (what customers see), indexed
   orders: new Map(),
@@ -47,7 +60,7 @@ const state = {
   filter: 'active',
   search: '',
   productSearch: '',
-  dash: { range: 'all', basis: 'booked', itemSort: 'boxes' },
+  dash: { channel: 'all', range: 'today', basis: 'booked', itemSort: 'boxes' },
   firstSnapshot: true,
   openCode: null,
   fresh: new Set(),
@@ -57,6 +70,8 @@ const state = {
   pulseCall: false,
 };
 let unsubs = [];
+let stopStaffWatch = null;
+let stopDashLedger = null;
 let swReg = null;
 let audioCtx = null;
 
@@ -102,15 +117,18 @@ function setupAuth() {
     err.hidden = true;
     unlockAudio();
     try {
-      await signInWithEmailAndPassword(auth, e.target.email.value.trim(), e.target.password.value);
+      await signInWithEmailAndPassword(auth, loginEmail(e.target.email.value), e.target.password.value);
     } catch (ex) {
-      err.textContent = /invalid|wrong|not-found|credential/i.test(ex.code ?? '') ? 'Wrong email or password.' : ex.message;
+      err.textContent = /invalid|wrong|not-found|credential/i.test(ex.code ?? '') ? 'Wrong username or password.'
+        : /disabled/i.test(ex.code ?? '') ? 'This login is switched off. Ask the shop owner.'
+          : /network/i.test(ex.code ?? '') ? 'No internet. Connect once to sign in.' : ex.message;
       err.hidden = false;
     }
   });
   $('#forgot').addEventListener('click', async () => {
     const email = $('#login-form').email.value.trim();
-    if (!email) return toast('Type your email first, then tap “Forgot password?”');
+    if (!email) return toast('Type your username or email first, then tap “Forgot password?”');
+    if (!email.includes('@')) return toast('Ask the shop owner to set a new password for you (Users tab).');
     try {
       await sendPasswordResetEmail(auth, email);
       toast('Password reset email sent.');
@@ -118,34 +136,98 @@ function setupAuth() {
       toast(ex.message);
     }
   });
-  $('#sign-out').addEventListener('click', () => signOut(auth));
+  $('#sign-out').addEventListener('click', async () => {
+    const waiting = await pendingCount();
+    if (waiting && !confirm(`${waiting} bill${waiting > 1 ? 's are' : ' is'} not uploaded yet. Connect to the internet first, or they upload after the next sign-in. Sign out anyway?`)) return;
+    signOut(auth);
+  });
+  $('#denied-signout').addEventListener('click', () => signOut(auth));
   $('#copy-uid').addEventListener('click', () => navigator.clipboard?.writeText($('#my-uid').textContent).then(() => toast('Copied')));
 
-  onAuthStateChanged(auth, async (user) => {
+  onAuthStateChanged(auth, (user) => {
     unsubs.forEach((u) => u());
     unsubs = [];
+    stopStaffWatch?.();
+    stopStaffWatch = null;
     state.orders.clear();
+    state.ordersOn = false;
     state.firstSnapshot = true;
+    state.user = null;
+    state.staff = null;
     $('#top-right').hidden = !user;
-    if (!user) return show('login-view');
-
-    // Remember the answer so the app (and counter billing) still opens without internet.
-    let isAdmin = false;
-    const adminKey = `bfw.admin.${user.uid}`;
-    try {
-      isAdmin = (await getDoc(doc(db, 'admins', user.uid))).exists();
-      localStorage.setItem(adminKey, isAdmin ? '1' : '0');
-    } catch (err) {
-      isAdmin = err?.code !== 'permission-denied' && localStorage.getItem(adminKey) === '1';
+    if (!user) {
+      $('#who').textContent = 'Shop admin';
+      delete document.body.dataset.role;
+      return show('login-view');
     }
-    if (!isAdmin) {
+    watchStaff(user);
+  });
+}
+
+// Who is signed in and their role, from admins/{uid}. Kept live (one read when the app opens): if the owner changes
+// someone's role or switches them off in Users, their app follows at once. Remembered for opening without internet.
+function watchStaff(user) {
+  const key = `bfw.staff.${user.uid}`;
+  const cached = () => {
+    const c = readJson(key);
+    return c.uid === user.uid ? c : null;
+  };
+  let started = false;
+  const begin = (staff) => {
+    started = true;
+    if (!staff || !staff.active) {
       $('#my-uid').textContent = user.uid;
+      $('#denied-title').textContent = staff ? 'Login switched off' : 'No access yet';
+      $('#denied-text').innerHTML = staff
+        ? 'The shop owner has switched off this login. Ask them to switch it on again in <strong>Users</strong>.'
+        : 'This login works, but it is not on the shop’s list of users. Ask the shop owner to add you in <strong>Users</strong>.';
       return show('denied-view');
     }
     state.user = user;
+    state.staff = staff;
+    applyRole();
     show('app-view');
     startApp();
-  });
+  };
+  // Offline: open with the remembered role straight away instead of waiting for the server.
+  if (!navigator.onLine && cached()) begin(cached());
+  stopStaffWatch = onSnapshot(
+    doc(db, 'admins', user.uid),
+    (snap) => {
+      let staff = null;
+      if (snap.exists()) {
+        staff = staffFromDoc(user.uid, snap.data(), user.email);
+        localStorage.setItem(key, JSON.stringify(staff));
+      } else if (snap.metadata.fromCache) {
+        staff = cached(); // no answer from the server yet
+      } else {
+        localStorage.removeItem(key);
+      }
+      if (!started) return begin(staff);
+      if (!state.staff) return; // already showing "no access"
+      if (!staff || !staff.active) {
+        toast('Your login was switched off.');
+        return signOut(auth);
+      }
+      if (staff.role !== state.staff.role) return location.reload();
+      state.staff = staff;
+      applyRole();
+    },
+    (err) => {
+      if (!started) begin(err?.code === 'permission-denied' ? null : cached());
+    },
+  );
+}
+
+/** Shows only what this role may use. The security rules enforce the same on the server. */
+function applyRole() {
+  const { role, name, username, email } = state.staff;
+  document.body.dataset.role = role;
+  $('#who').textContent = `${name} · ${ROLES[role].label}`;
+  $('#who-detail').textContent = `${name} (${username || email}) · ${ROLES[role].label}: ${ROLES[role].blurb}`;
+  $('.a-tab[data-tab="dashboard"]').textContent = role === 'sales' ? '📊 My sales' : '📊 Sales';
+  const current = document.querySelector('.a-tab[aria-selected="true"]');
+  if (current && getComputedStyle(current).display === 'none') $('.a-tab[data-tab="billing"]').click();
 }
 
 // ── App ──────────────────────────────────────────────────
@@ -159,8 +241,36 @@ async function startApp() {
     }
   }
 
-  // A billing counter phone doesn't load online orders: saves reads and battery.
-  if (!prefs.counter) unsubs.push(
+  initLedger({ db, staff: state.staff }).catch((e) => console.warn('Bills ledger', e));
+
+  // A billing counter phone doesn't load online orders: saves reads and battery. Sales staff load them only when they
+  // open the Orders tab (push notifications still arrive).
+  if (!prefs.counter && (isAdminRole(state.staff.role) || state.deepLinkCode)) startOrders();
+  if (prefs.counter) state.dash.channel = 'counter';
+
+  unsubs.push(
+    onSnapshot(doc(db, 'settings', 'public'), (snap) => {
+      state.settings = { soldOut: [], ordersOpen: true, notice: '', catalog: {}, ...(snap.data() ?? {}) };
+      rebuildCatalog();
+      fillSettingsForm();
+      renderProducts();
+      renderDash();
+      if (state.catalog) billingCatalogChanged(state.catalog);
+    }),
+  );
+
+  if (prefs.counter) document.body.classList.add('counter-mode');
+  if (state.deepLinkCode && !prefs.counter) $('.a-tab[data-tab="orders"]').click(); // opened from a notification
+  else if (prefs.counter || !isAdminRole(state.staff.role)) $('.a-tab[data-tab="billing"]').click();
+  else $('.a-tab[data-tab="orders"]').click();
+  if (!prefs.counter) setupAlerts();
+}
+
+/** The live list of online orders (newest first). Started once per sign-in. */
+function startOrders() {
+  if (state.ordersOn || !state.user) return;
+  state.ordersOn = true;
+  unsubs.push(
     onSnapshot(
       query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(ORDER_LIMIT)),
       (snap) => {
@@ -184,28 +294,11 @@ async function startApp() {
       },
       (err) => {
         console.error(err);
+        state.ordersOn = false;
         $('#order-list').innerHTML = `<p class="a-error">Could not load orders: ${escapeHtml(err.message)}</p>`;
       },
     ),
   );
-
-  unsubs.push(
-    onSnapshot(doc(db, 'settings', 'public'), (snap) => {
-      state.settings = { soldOut: [], ordersOpen: true, notice: '', catalog: {}, ...(snap.data() ?? {}) };
-      rebuildCatalog();
-      fillSettingsForm();
-      renderProducts();
-      renderDash();
-      if (state.catalog) billingCatalogChanged(state.catalog);
-    }),
-  );
-
-  if (prefs.counter) {
-    document.body.classList.add('counter-mode');
-    $('.a-tab[data-tab="billing"]').click();
-  } else {
-    setupAlerts();
-  }
 }
 
 // ── Orders list ──────────────────────────────────────────
@@ -405,7 +498,7 @@ function changeStatus(code, status) {
     status,
     shopMessage: message,
     updatedAt: serverTimestamp(),
-    statusHistory: arrayUnion({ status, at: Timestamp.now(), by: state.user.email ?? '' }),
+    statusHistory: arrayUnion({ status, at: Timestamp.now(), by: state.staff?.name || state.user.email || '' }),
   });
   batch.set(doc(db, 'tracking', code), { status, message, updatedAt: serverTimestamp() }, { merge: true });
   batch
@@ -717,7 +810,7 @@ async function submitItem(e) {
   if (!(finalPrice > 0)) return fail('Enter the final price the customer pays.', f.finalPrice);
   if (amount < finalPrice) return fail('Amount (before discount) cannot be less than the final price.', f.amount);
 
-  const meta = { updatedBy: state.user.email ?? '', updatedAt: serverTimestamp() };
+  const meta = { updatedBy: state.staff?.name || state.user.email || '', updatedAt: serverTimestamp() };
   const fields = { name, brand, pcsPerBox: pcs, amount, finalPrice, bulkOfferEligible: f.bulkOfferEligible.checked };
   const existing = editingId ? overrides()[editingId] : null;
   const original = editingId ? state.base.products.find((p) => p.id === editingId) : null;
@@ -847,31 +940,73 @@ function categoryOf(item) {
   return cat ? { id: cat.id, name: cat.name, section: cat.section } : { id: 'other', name: 'Other', section: 'others' };
 }
 
+// Admins: All sales (counter + online) · Counter · Online, by salesperson. Sales staff: only their own counter sales.
+function dashSyncLine() {
+  const { status, error } = ledgerStatus();
+  if (status === 'syncing') return 'Getting the latest bills…';
+  if (status === 'error') return `⚠ ${error}`;
+  if (!navigator.onLine) return '⚠ Offline. Showing the bills this phone already has.';
+  return status === 'live' ? '✓ Up to date. New bills appear by themselves.' : '';
+}
+
 function renderDash() {
-  if ($('#tab-dashboard').hidden) return; // only compute while the Sales tab is open
+  if ($('#tab-dashboard').hidden || !state.staff) return; // only compute while the Sales tab is open
+  const mine = !isAdminRole(state.staff.role);
   const { range, basis, itemSort } = state.dash;
+  const channel = mine ? 'counter' : state.dash.channel;
+  const today = istDate(new Date());
+  renderChips($('#dash-channel'), CHANNELS, channel, 'channel');
   renderChips($('#dash-range'), RANGES, range, 'range');
   renderChips($('#dash-basis'), BASES, basis, 'basis');
-  const stats = computeSales([...state.orders.values()], { range, basis, categoryOf, today: istDate(new Date()) });
-  state.dashStats = stats;
-  renderDashboard($('#dashboard'), stats, { range, basis, itemSort });
+  $('#dash-basis').hidden = mine || channel === 'counter';
+  $('#dash-sync').textContent = channel === 'online' ? '' : dashSyncLine();
+  if (channel !== 'counter') startOrders(); // online numbers need the orders list
+  const c = computeCounter(ledgerBills(), { range, categoryOf, today });
+  const o = computeSales([...state.orders.values()], { range, basis, categoryOf, today });
+  state.dashStats = { c, o, channel, mine, today, items: channel === 'online' ? o.items : channel === 'counter' ? c.items : [...c.items, ...o.items] };
+  const el = $('#dashboard');
+  if (channel === 'online') renderDashboard(el, o, { range, basis, itemSort });
+  else if (channel === 'counter') renderCounterSales(el, { c, range, itemSort, mine });
+  else renderAllSales(el, { c, o, range, basis, itemSort });
+}
+
+function downloadCsv(text, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
 function setupDashboardUi() {
+  onLedger(() => renderDash());
   $('#tab-dashboard').addEventListener('click', (e) => {
+    const ch = e.target.closest('[data-channel]');
     const r = e.target.closest('[data-range]');
     const b = e.target.closest('[data-basis]');
     const so = e.target.closest('[data-sort]');
+    if (ch) state.dash.channel = ch.dataset.channel;
     if (r) state.dash.range = r.dataset.range;
     if (b) state.dash.basis = b.dataset.basis;
     if (so) state.dash.itemSort = so.dataset.sort;
-    if (r || b || so) return renderDash();
-    if (e.target.closest('#item-csv') && state.dashStats) {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob(['﻿' + itemSalesCsv(state.dashStats.items)], { type: 'text/csv;charset=utf-8' }));
-      a.download = `best-fireworks-item-sales-${state.dash.range}-${istDate(new Date())}.csv`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    if (ch || r || b || so) return renderDash();
+    const st = state.dashStats;
+    if (!st) return;
+    const person = e.target.closest('[data-person]');
+    if (person) return openBillsManager({ range: state.dash.range, person: person.dataset.person, status: 'ok', q: '' });
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'bills') return openBillsManager({ range: state.dash.range, person: 'all', status: 'ok', q: '' });
+    if (act === 'bills-csv') {
+      const { from, to } = st.c;
+      const list = ledgerBills().filter((x) => (!from || x.day >= from) && x.day <= to);
+      return downloadCsv(billsCsv(list), `best-fireworks-bills-${state.dash.range}-${st.today}.csv`);
+    }
+    if (act === 'report') {
+      const text = salesReportText({ c: st.c, o: st.mine || st.channel === 'counter' ? null : st.o, range: state.dash.range, today: st.today, mine: st.mine, name: state.staff.name });
+      return openExternal(`https://wa.me/?text=${encodeURIComponent(text)}`);
+    }
+    if (e.target.closest('#item-csv')) {
+      downloadCsv(itemSalesCsv(st.items), `best-fireworks-item-sales-${state.dash.range}-${st.today}.csv`);
     }
   });
 }
@@ -1099,12 +1234,16 @@ function setupNativeApp() {
   PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
     const code = normalizeOrderCode(notification?.data?.code);
     if (!code) return;
-    if (state.orders.has(code)) openOrder(code);
-    else state.deepLinkCode = code;
+    if (state.orders.has(code)) return openOrder(code);
+    state.deepLinkCode = code;
+    if (state.staff) {
+      startOrders();
+      $('.a-tab[data-tab="orders"]').click();
+    }
   });
   // Android back button closes an open order/item first, then sends the app to the background.
   CapApp.addListener('backButton', () => {
-    const open = document.querySelector('dialog[open]');
+    const open = [...document.querySelectorAll('dialog[open]')].pop();
     if (open) open.close();
     else CapApp.minimizeApp();
   });
@@ -1155,14 +1294,27 @@ function setupAlerts() {
 }
 
 // ── Boot ─────────────────────────────────────────────────
+// Things that stay on screen under the header (Billing's Scan | Search | Bill bar) need its height.
+const topBar = document.querySelector('.a-top');
+new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', `${topBar.offsetHeight}px`)).observe(topBar);
+
 document.querySelectorAll('.a-tab').forEach((tab) =>
   tab.addEventListener('click', () => {
     document.querySelectorAll('.a-tab').forEach((t) => t.setAttribute('aria-selected', String(t === tab)));
-    for (const id of ['orders', 'billing', 'dashboard', 'products', 'pdf', 'settings']) $(`#tab-${id}`).hidden = id !== tab.dataset.tab;
+    for (const id of ['orders', 'billing', 'dashboard', 'products', 'pdf', 'users', 'settings']) $(`#tab-${id}`).hidden = id !== tab.dataset.tab;
     if (tab.dataset.tab === 'billing') openBilling();
     else closeBilling();
-    if (tab.dataset.tab === 'dashboard') renderDash();
+    if (tab.dataset.tab === 'orders') startOrders();
+    // Counter bills stay live only while the Sales tab is open.
+    if (tab.dataset.tab === 'dashboard') {
+      stopDashLedger ??= watchLedger();
+      renderDash();
+    } else {
+      stopDashLedger?.();
+      stopDashLedger = null;
+    }
     if (tab.dataset.tab === 'pdf') openPdfTab();
+    if (tab.dataset.tab === 'users') openUsersTab();
   }),
 );
 
@@ -1175,7 +1327,26 @@ if (!app) {
   setupDashboardUi();
   setupSettingsUi();
   setupPdfTab({ db, toast, getCatalog: () => state.catalog, getSoldOut: () => state.settings.soldOut ?? [] });
-  setupBilling({ db, toast, getUser: () => state.user, openExternal }).catch((e) => console.error('Billing setup failed', e));
+  setupBilling({
+    db, toast, openExternal,
+    getStaff: () => state.staff,
+    openBills: () => openBillsManager({ range: 'today', person: 'all', status: 'ok', q: '' }),
+  }).catch((e) => console.error('Billing setup failed', e));
+  setupBillsManager({
+    toast,
+    getStaff: () => state.staff,
+    whatsappUrl,
+    onRebill: (items) => {
+      startBillFrom(items);
+      $('.a-tab[data-tab="billing"]').click();
+    },
+  });
+  setupUsersTab({
+    toast,
+    getStaff: () => state.staff,
+    call: (data) => httpsCallable(functions, 'staffUsers')(data).then((r) => r.data),
+  });
+  window.addEventListener('online', () => retryLedger());
   $('#go-pdf').addEventListener('click', () => $('.a-tab[data-tab="pdf"]').click());
   setupAuth();
 }

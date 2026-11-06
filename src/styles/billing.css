@@ -1,7 +1,11 @@
-/* Counter billing (admin page / Best FireWorks app) */
+/* Counter billing (admin page / Best FireWorks app)
+   Layout: open-bill chips · status row · Scan | Search | Bill switcher (stays on screen) · view · fixed checkout bar */
 .billing {
-  padding-bottom: calc(96px + var(--safe-bottom));
+  --seg-h: 54px;
+  padding-bottom: calc(110px + var(--safe-bottom));
 }
+
+/* Open bills */
 .bl-bills {
   display: flex;
   gap: 0.4rem;
@@ -38,47 +42,27 @@
 }
 .bl-new {
   place-items: center;
+  min-width: 72px;
   color: var(--brand);
   font-weight: 700;
 }
 
-.bl-toolbar {
+/* Status row: prices/photos sync + Bills */
+.bl-head {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin: 0.6rem 0;
-}
-.bl-mode {
-  display: flex;
-  flex-shrink: 0;
-  padding: 3px;
-  border-radius: 10px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-.bl-mode button {
-  min-height: 38px;
-  padding: 0 0.9rem;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  font-weight: 700;
-  cursor: pointer;
-}
-.bl-mode button[aria-pressed='true'] {
-  background: var(--brand);
-  color: #fff;
+  margin: 0.55rem 0 0;
 }
 .bl-sync {
   flex: 1;
   min-width: 0;
-  min-height: 38px;
+  min-height: 34px;
   padding: 0 0.6rem;
   overflow: hidden;
   border: 0;
   border-radius: 10px;
-  background: var(--surface);
-  box-shadow: 0 0 0 1px var(--border) inset;
+  background: transparent;
   color: var(--muted);
   font-size: 0.74rem;
   font-weight: 600;
@@ -90,6 +74,51 @@
 .bl-sync.busy {
   color: var(--info);
 }
+.bl-head .btn {
+  flex-shrink: 0;
+}
+
+/* Scan | Search | Bill: stays at the top of the screen while the list below scrolls */
+.bl-seg {
+  position: sticky;
+  top: var(--top-h, 0px); /* just below the app header, which also stays on screen */
+  z-index: 6;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  height: var(--seg-h);
+  margin: 0 -16px;
+  padding: 6px 16px;
+  background: var(--bg);
+}
+.bl-seg button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--border) inset;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.bl-seg button[aria-selected='true'] {
+  background: var(--brand);
+  box-shadow: none;
+  color: #fff;
+}
+.bl-seg-count {
+  min-width: 1.4rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--amber);
+  color: #1b2130;
+  font-size: 0.78rem;
+  line-height: 1.4rem;
+}
 
 /* Camera */
 .bl-camera {
@@ -98,6 +127,7 @@
   aspect-ratio: 4 / 3;
   max-height: 46vh;
   width: 100%;
+  margin-top: 0.25rem;
   border-radius: 14px;
   background: #0f1117;
 }
@@ -149,6 +179,9 @@
   gap: 0.4rem;
   margin-top: 0.6rem;
 }
+.bl-matches:empty {
+  display: none;
+}
 .bl-matches p {
   margin: 0;
   font-size: 0.86rem;
@@ -190,16 +223,84 @@
   font-weight: 700;
 }
 
-/* Search */
-#bl-search input[type='search'] {
-  margin-bottom: 0.5rem;
+/* "Added" with Undo, on top of the camera so it never covers the Scan button */
+.bl-added {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: max-content;
+  max-width: calc(100% - 20px);
+  padding: 0.5rem 0.55rem 0.5rem 0.95rem;
+  border-radius: 999px;
+  background: #1b2130;
+  color: #fff;
+  font-size: 0.84rem;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-50%);
+}
+.bl-added span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bl-added button {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 0 0.8rem;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #1b2130;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Last added (under the camera) */
+.bl-recent {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.85rem;
+}
+.bl-recent:empty {
+  display: none;
+}
+.bl-recent-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.bl-recent-head h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Search: the box and categories stay under the switcher; the page itself scrolls (no box-in-a-box) */
+.bl-search-head {
+  position: sticky;
+  top: calc(var(--top-h, 0px) + var(--seg-h));
+  z-index: 5;
+  margin: 0 -16px;
+  padding: 2px 16px 6px;
+  background: var(--bg);
+}
+.bl-search-head input[type='search'] {
+  width: 100%;
+  margin-bottom: 0.45rem;
 }
 #bl-cats {
   display: flex;
   gap: 0.4rem;
   overflow-x: auto;
   scrollbar-width: none;
-  padding: 0.1rem 0 0.2rem;
+  margin: 0;
+  padding: 0.1rem 0;
 }
 #bl-cats::-webkit-scrollbar {
   display: none;
@@ -228,25 +329,28 @@
 .bl-grid {
   display: grid;
   gap: 0.35rem;
-  margin-top: 0.5rem;
-  max-height: 46vh;
-  overflow-y: auto;
+  margin-top: 0.25rem;
 }
 .bl-item {
   display: grid;
   grid-template-columns: 44px 1fr auto;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.35rem 0.6rem 0.35rem 0.35rem;
-  border: 0;
+  min-height: 60px;
+  padding: 0.35rem 0.5rem 0.35rem 0.35rem;
   border-radius: 10px;
   background: var(--surface);
   box-shadow: 0 0 0 1px var(--border) inset;
   text-align: left;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 .bl-item:active {
   background: var(--brand-soft);
+}
+.bl-item.in-bill {
+  background: #fffaf0;
+  box-shadow: 0 0 0 1.5px var(--amber) inset;
 }
 .bl-item img,
 .bl-noimg {
@@ -256,37 +360,51 @@
   object-fit: contain;
   background: var(--surface-2);
 }
+.bl-item-info {
+  min-width: 0;
+}
 .bl-item-info strong {
   display: block;
   font-size: 0.86rem;
   line-height: 1.25;
 }
-.bl-item-price {
-  font-weight: 800;
-  text-align: right;
-  white-space: nowrap;
-}
-.bl-item-price em {
+.bl-price {
   display: block;
-  color: var(--brand);
+  margin-top: 0.1rem;
+  font-size: 0.9rem;
+}
+.bl-price s {
+  color: var(--muted);
   font-size: 0.75rem;
-  font-style: normal;
+  font-weight: 500;
+}
+.bl-plus {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font-size: 1.3rem;
+  font-weight: 800;
 }
 
-/* Cart */
+/* Bill lines (Bill view and "Last added") */
 .bl-cart-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin: 1rem 0 0.4rem;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.45rem;
 }
 .bl-cart-head h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.1rem;
 }
 .bl-cart-head small {
   color: var(--muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .bl-cart {
   display: grid;
@@ -339,31 +457,35 @@
   grid-area: total;
   text-align: right;
 }
-.bl-step {
+.bl-line .bl-step {
   grid-area: step;
-  display: inline-flex;
   justify-self: start;
+}
+.bl-step {
+  display: inline-flex;
   align-items: center;
   border-radius: 8px;
+  background: var(--surface);
   box-shadow: 0 0 0 1px var(--border) inset;
 }
 .bl-step button {
-  width: 36px;
-  height: 32px;
+  width: 38px;
+  height: 36px;
   border: 0;
   background: transparent;
   color: var(--brand);
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   font-weight: 800;
   cursor: pointer;
 }
 .bl-step input {
-  width: 46px;
+  width: 44px;
   min-height: 0;
-  height: 32px;
+  height: 36px;
   padding: 0;
   border: 0;
   border-radius: 0;
+  background: transparent;
   font-weight: 700;
   text-align: center;
   -moz-appearance: textfield;
@@ -376,59 +498,27 @@
   padding: 0.8rem 0;
   text-align: center;
 }
-.bl-links {
+.bl-empty-bill {
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+  padding: 1.5rem 0.5rem;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+#bl-sum-mini .bl-sum {
+  margin-top: 0.6rem;
+}
+.bl-bill-actions {
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.4rem;
   margin-top: 0.75rem;
 }
-/* room below the last item so it can scroll clear of the fixed checkout bar */
-#tab-billing {
-  padding-bottom: calc(96px + var(--safe-bottom, 0px));
-}
 
-/* Added toast with Undo */
-.bl-added {
-  position: fixed;
-  left: 50%;
-  bottom: calc(84px + var(--safe-bottom));
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  max-width: calc(100% - 32px);
-  padding: 0.55rem 0.6rem 0.55rem 1rem;
-  border-radius: 999px;
-  background: #1b2130;
-  color: #fff;
-  font-size: 0.88rem;
-  box-shadow: var(--shadow-lg);
-  transform: translateX(-50%);
-}
-.bl-added span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.bl-camera .bl-added {
-  position: absolute;
-  top: 10px;
-  bottom: auto;
-  z-index: 3;
-  width: max-content;
-  max-width: calc(100% - 20px);
-  font-size: 0.84rem;
-}
-.bl-added button {
-  min-height: 32px;
-  padding: 0 0.8rem;
-  border: 0;
-  border-radius: 999px;
-  background: #fff;
-  color: #1b2130;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-/* Bottom bar */
+/* Bottom bar: total (tap to see the bill) + Checkout */
 .bl-bar {
   position: fixed;
   left: 0;
@@ -443,16 +533,30 @@
   background: var(--surface);
   box-shadow: 0 -4px 18px rgb(16 24 40 / 14%);
 }
+.bl-bar-sum {
+  display: grid;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
 .bl-bar strong {
   display: block;
   font-size: 1.3rem;
   line-height: 1.1;
 }
 .bl-bar small {
+  overflow: hidden;
   color: var(--muted);
   font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .bl-bar .btn {
+  flex-shrink: 0;
   min-width: 140px;
   min-height: 50px;
   font-size: 1.05rem;
@@ -548,33 +652,8 @@
   font-size: 2rem;
 }
 
-/* Today's bills */
-.bl-history {
-  display: grid;
-  gap: 0.35rem;
-}
-.bl-hrow {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.55rem 0.7rem;
-  border-radius: 10px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-.bl-hrow small {
-  display: block;
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-.bl-hright {
-  text-align: right;
-}
-
-/* Counter mode: only billing-related tabs */
+/* Counter mode: billing phone without online orders and order alerts */
 body.counter-mode .a-tab[data-tab='orders'],
-body.counter-mode .a-tab[data-tab='dashboard'],
 body.counter-mode #alert-setup,
 body.counter-mode #new-banner {
   display: none !important;
