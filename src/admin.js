@@ -18,7 +18,7 @@ import { cleanCodeInput, newOrderCode, normalizeOrderCode } from './lib/codes.js
 import { app, EMULATOR_HOST, useEmulators } from './lib/firebase-app.js';
 import { formatDate, formatDateTime, formatPaise, formatRupees, toPaise } from './lib/money.js';
 import { computeTotals } from './lib/pricing.js';
-import { computeCounter, computeSales, BASES, RANGES } from './lib/sales.js';
+import { computeCounter, computeSales, BASES, otherItems, otherKey, RANGES } from './lib/sales.js';
 import { isAdminRole, loginEmail, ROLES, staffFromDoc } from './lib/staff.js';
 import { STATUS } from './lib/status.js';
 import {
@@ -933,6 +933,7 @@ function setupProductUi() {
 
 // ── Sales dashboard ──────────────────────────────────────
 function categoryOf(item) {
+  if (item.custom) return { id: 'custom', name: 'Other items (not in the list)', section: 'others' };
   const cats = state.base?.categories ?? [];
   const p = state.catalog?.productsById.get(item.id) ?? state.base?.products.find((x) => x.id === item.id);
   const catId = p?.categoryId ?? overrides()[item.id]?.categoryId;
@@ -968,6 +969,47 @@ function renderDash() {
   if (channel === 'online') renderDashboard(el, o, { range, basis, itemSort });
   else if (channel === 'counter') renderCounterSales(el, { c, range, itemSort, mine });
   else renderAllSales(el, { c, o, range, basis, itemSort });
+  if (!mine && channel !== 'online') el.insertAdjacentHTML('afterbegin', notInListSection());
+}
+
+// ── Items sold that are not in the price list ("Other item" at the counter) ──
+const NL_SKIP_KEY = 'bfw.notInList.skip';
+const nlSkipped = () => {
+  try { return new Set(JSON.parse(localStorage.getItem(NL_SKIP_KEY) || '[]')); } catch { return new Set(); }
+};
+/** Whole season; an item drops off by itself once an item with that name is in the price list. */
+function notInListRows() {
+  const known = new Set((state.catalog?.products ?? []).map((p) => otherKey(p.name)));
+  const skip = nlSkipped();
+  return otherItems(ledgerBills()).filter((r) => !known.has(r.key) && !skip.has(r.key));
+}
+function notInListSection() {
+  const rows = notInListRows();
+  state.nlRows = rows;
+  if (!rows.length) return '';
+  const price = (r) => (r.minPrice === r.maxPrice ? formatRupees(r.lastPrice) : `${formatRupees(r.lastPrice)} (${formatRupees(r.minPrice)}–${formatRupees(r.maxPrice)})`);
+  const n = (k, w) => `${k} ${w}${k === 1 ? '' : w === 'box' ? 'es' : 's'}`;
+  return `<section class="dash-card nl-card">
+      <div class="dash-head"><h3>🆕 Not in the price list · ${rows.length}</h3></div>
+      <p class="muted">Sold this season as <strong>✍ Other item</strong>. Add them to Items &amp; prices (with a photo) so they can be searched and scanned next time.</p>
+      ${rows.map((r, i) => `<div class="nl-row">
+          <div><strong>${escapeHtml(r.name)}</strong>
+            <small>${n(r.boxes, 'box')} · ${n(r.bills, 'bill')} · ${price(r)} · last ${r.lastAt ? formatDateTime(new Date(r.lastAt)) : '—'}${r.by.length ? ` · ${escapeHtml(r.by.join(', '))}` : ''}</small></div>
+          <button type="button" class="btn btn-sm btn-primary" data-nl-add="${i}">＋ Add</button>
+          <button type="button" class="btn btn-sm btn-soft nl-skip" data-nl-skip="${i}" aria-label="Not needed, hide from this list" title="Not needed">✕</button>
+        </div>`).join('')}
+    </section>`;
+}
+function addOtherToPriceList(r) {
+  if (!state.base) return toast('The price list is still loading. Try again in a moment.');
+  openItemEditor(null);
+  const f = $('#item-form');
+  f.name.value = r.name;
+  f.finalPrice.value = r.lastPrice;
+  f.amount.value = r.lastPrice;
+  showDiscount();
+  $('#item-original').textContent = `Sold ${r.boxes} box${r.boxes === 1 ? '' : 'es'} as an other item, last at ${formatRupees(r.lastPrice)}. Pick the category, check the price, add a photo, then Save.`;
+  $('#item-dialog').addEventListener('close', () => renderDash(), { once: true });
 }
 
 function downloadCsv(text, name) {
@@ -992,6 +1034,17 @@ function setupDashboardUi() {
     if (ch || r || b || so) return renderDash();
     const st = state.dashStats;
     if (!st) return;
+    const nlAdd = e.target.closest('[data-nl-add]');
+    if (nlAdd) return addOtherToPriceList(state.nlRows[Number(nlAdd.dataset.nlAdd)]);
+    const nlSkip = e.target.closest('[data-nl-skip]');
+    if (nlSkip) {
+      const r = state.nlRows[Number(nlSkip.dataset.nlSkip)];
+      if (!confirm(`Hide “${r.name}” from this list on this phone? (It stays in the bills.)`)) return;
+      const skip = nlSkipped();
+      skip.add(r.key);
+      try { localStorage.setItem(NL_SKIP_KEY, JSON.stringify([...skip])); } catch { /* fine */ }
+      return renderDash();
+    }
     const person = e.target.closest('[data-person]');
     if (person) return openBillsManager({ range: state.dash.range, person: person.dataset.person, status: 'ok', q: '' });
     const act = e.target.closest('[data-act]')?.dataset.act;

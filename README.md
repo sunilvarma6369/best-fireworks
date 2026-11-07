@@ -134,8 +134,9 @@ While the app or admin page is open, new orders ring straight away. To get a not
 **🧾 Billing**. Made for the stall: quick bills, several at once, and it keeps working without internet.
 
 The screen has three views, switched with the bar at the top (it stays on screen while you scroll):
-- **📷 Scan**: hold the box inside the square and tap **📷 Scan item**. A sure match is added straight away (with Undo); otherwise the closest items are shown to tap. Turn on **Auto** to add each box held steady in front of the camera. The last 3 items added show under the camera.
-- **🔍 Search**: by name, brand or item number, or by category. Tap a result to add it; items already on the bill show **− qty +** right on the result.
+- **📷 Scan**: hold the box inside the square and tap **📷 Scan item**. A sure match is added straight away (with Undo and **Swap** to the next-best items); otherwise the closest items are listed, and only their **＋ Add** button adds (not the whole row, and not in the first half-second, so a resting thumb adds nothing). The same box is never added twice within 2 seconds. Turn on **Auto** to add each box held steady in front of the camera; while Auto is on the big button reads **⏸ Pause auto** and shows only a status line. The last 3 items added show under the camera.
+- **🔍 Search**: by name, brand or item number, or by category. Forgiving: word order, spaces, dashes and one wrong letter don't matter, and an item number comes first. Tap a result (or press Enter for the top one) and the box empties, ready for the next item; items already on the bill show **− qty +** right on the result.
+- **✍ Other**: an item that is not in the price list or will not scan: type its name, price and quantity (recently used ones are one tap). Admins see these under **Sales → 🆕 Not in the price list** (season totals, price, who sold it) with **＋ Add** to put it in Items & prices; once it is there it drops off the list.
 - **🧾 Bill**: the whole bill with quantities, totals, **Hold & start a new bill**, Clear, Delete.
 
 The bar at the bottom always shows the total; tap it to see the bill, or tap **Checkout**.

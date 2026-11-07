@@ -17,6 +17,9 @@ const $ = (sel) => document.querySelector(sel);
 const PAY = { upi: 'UPI', cash: 'Cash', card: 'Card' };
 const VIEWS = ['scan', 'search', 'bill'];
 const AUTO_INTERVAL = 700;
+const SAME_SCAN_MS = 2000; // the same box seen again this soon is the same box, not a second one
+const TAP_GUARD_MS = 450; // taps on a suggestion list that just appeared are ignored (a finger already on the screen)
+const RECENT_OTHER_KEY = 'bfw.billing.otherRecent';
 
 const B = {
   ctx: null, // { db, toast, getStaff, openExternal, openBills }
@@ -38,6 +41,9 @@ const B = {
   lockId: null,
   lastTop: null,
   lastAdded: null,
+  scanning: false,
+  lastScanAdd: { id: null, at: 0 },
+  matchesAt: 0,
   uploading: new Set(),
 };
 
@@ -60,14 +66,95 @@ function feedback() {
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : word === 'box' ? 'es' : 's'}`;
 const activeBill = () => B.bills.find((b) => b.id === B.active);
-const product = (id) => B.catalog?.productsById.get(id);
-const thumb = (id) => B.urls.get(id) ?? product(id)?.image ?? null;
 const istDay = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(iso));
-const thumbHtml = (id) => (thumb(id) ? `<img src="${escapeHtml(thumb(id))}" alt="" loading="lazy" />` : '<span class="bl-noimg"></span>');
+
+// "Other" items: not in the price list, typed in at the counter (name + price). They live on the open bill
+// (bill.custom) and go into the saved bill with custom: true, so admins can add them to the price list later.
+const isOtherId = (id) => id.startsWith('x-');
+const otherProduct = (id, c) => ({
+  id, custom: true, listNo: '', name: c.name, brand: '', amount: c.price, finalPrice: c.price,
+  bulkOfferEligible: false, categoryId: 'custom', category: 'Other items',
+});
+const product = (id, bill = activeBill()) => B.catalog?.productsById.get(id)
+  ?? (bill?.custom?.[id] ? otherProduct(id, bill.custom[id]) : undefined);
+const thumb = (id) => B.urls.get(id) ?? product(id)?.image ?? null;
+const thumbHtml = (id) => (thumb(id) ? `<img src="${escapeHtml(thumb(id))}" alt="" loading="lazy" />`
+  : `<span class="bl-noimg">${isOtherId(id) ? '✍' : ''}</span>`);
+
+function productsFor(bill) {
+  const base = B.catalog?.productsById ?? new Map();
+  const custom = Object.entries(bill?.custom ?? {});
+  if (!custom.length) return base;
+  const all = new Map(base);
+  for (const [id, c] of custom) all.set(id, otherProduct(id, c));
+  return all;
+}
 
 function billTotals(bill) {
   const qty = new Map(Object.entries(bill?.lines ?? {}).map(([id, n]) => [id, Number(n)]));
-  return computeTotals(qty, B.catalog?.productsById ?? new Map(), B.catalog?.offer, new Set(), todayIST());
+  return computeTotals(qty, productsFor(bill), B.catalog?.offer, new Set(), todayIST());
+}
+
+// ── Search: forgiving matching ─────────────────────────────
+// "sky shot", "skyshot", "SKY-SHOT" and "shot sky" all find "Sky Shot 30"; an item number finds that item first;
+// one wrong letter in a longer word still matches when nothing else does.
+const norm = (s) => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
+const searchIndex = new WeakMap();
+function haystack(p) {
+  let h = searchIndex.get(p);
+  if (!h) {
+    const text = norm(`${p.name} ${p.brand ?? ''} ${p.category ?? ''}`);
+    h = { name: norm(p.name), text, compact: text.replace(/ /g, ''), words: text.split(' '), no: String(p.listNo ?? '') };
+    searchIndex.set(p, h);
+  }
+  return h;
+}
+function oneEditAway(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+/** Matching products, best first. `fuzzy` is true when only close spellings were found. */
+function searchProducts(products, q) {
+  const query = norm(q);
+  if (!query) return { list: products, fuzzy: false };
+  const tokens = query.split(' ');
+  const compactQ = query.replace(/ /g, '');
+  const score = (p) => {
+    const h = haystack(p);
+    let s = 0;
+    if (/^\d+$/.test(compactQ) && h.no === compactQ) s += 1000;
+    else if (/^\d+$/.test(compactQ) && h.no.startsWith(compactQ)) s += 300;
+    const textHit = tokens.every((t) => h.text.includes(t) || h.compact.includes(t)) || h.compact.includes(compactQ);
+    if (!textHit && s === 0) return 0;
+    if (textHit) {
+      s += 100;
+      if (h.name.startsWith(query)) s += 60;
+      else if (h.words.some((w) => w.startsWith(tokens[0]))) s += 30;
+    }
+    return s;
+  };
+  let ranked = products.map((p, i) => ({ p, i, s: score(p) })).filter((x) => x.s > 0);
+  let fuzzy = false;
+  if (!ranked.length) {
+    // Nothing found: allow one wrong, missing or extra letter in each word of 4+ letters.
+    const ok = (p) => tokens.every((t) => {
+      const h = haystack(p);
+      if (h.text.includes(t)) return true;
+      return t.length >= 4 && h.words.some((w) => oneEditAway(t, w) || (w.length > t.length && oneEditAway(t, w.slice(0, t.length))));
+    });
+    ranked = products.map((p, i) => ({ p, i, s: 1 })).filter((x) => ok(x.p));
+    fuzzy = ranked.length > 0;
+  }
+  ranked.sort((a, b) => b.s - a.s || a.i - b.i);
+  return { list: ranked.map((x) => x.p), fuzzy };
 }
 
 /** Bill lines, the most recently added first. */
@@ -180,7 +267,7 @@ const stepperHtml = (qty) => `<div class="bl-step">
 function lineHtml({ product: p, qty, lineTotal }) {
   return `<div class="bl-line${B.lastAdded === p.id ? ' flash' : ''}" data-id="${p.id}">
       ${thumbHtml(p.id)}
-      <div class="bl-line-info"><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.brand ?? '')} · ${formatRupees(p.finalPrice)}</small></div>
+      <div class="bl-line-info"><strong>${escapeHtml(p.name)}</strong><small>${p.custom ? '<span class="bl-other-tag">Other item</span>' : escapeHtml(p.brand ?? '')} · ${formatRupees(p.finalPrice)}</small></div>
       ${stepperHtml(qty)}
       <strong class="bl-line-total">${formatPaise(lineTotal)}</strong>
     </div>`;
@@ -205,7 +292,8 @@ function renderBillView(bill, t) {
     ? recentLines(bill, t).map(lineHtml).join('')
     : `<div class="bl-empty-bill"><p class="muted">This bill is empty.</p>
         <div class="d-row-btns"><button type="button" class="btn btn-soft" data-bl-view="scan">📷 Scan a box</button>
-        <button type="button" class="btn btn-soft" data-bl-view="search">🔍 Search items</button></div></div>`;
+        <button type="button" class="btn btn-soft" data-bl-view="search">🔍 Search items</button>
+        <button type="button" class="btn btn-soft" data-other="">✍ Other item</button></div></div>`;
   $('#bl-sum-mini').innerHTML = t.itemCount ? `<div class="bl-sum">
       <div><span>Amount</span><span>${formatPaise(t.amountTotal)}</span></div>
       <div class="save"><span>Discount</span><span>−${formatPaise(t.discountTotal)}</span></div>
@@ -229,11 +317,17 @@ function renderSearch() {
   const cats = B.catalog.categories;
   $('#bl-cats').innerHTML = [{ id: 'all', name: 'All' }, ...cats]
     .map((c) => `<button type="button" class="chip" data-cat="${c.id}" aria-pressed="${B.cat === c.id}">${escapeHtml(c.name)}</button>`).join('');
-  const tokens = B.q.toLowerCase().split(/\s+/).filter(Boolean);
   const lines = activeBill()?.lines ?? {};
-  const list = B.catalog.products.filter((p) => (B.cat === 'all' || p.categoryId === B.cat)
-    && tokens.every((t) => `${p.name} ${p.brand ?? ''} ${p.listNo} ${p.category}`.toLowerCase().includes(t)));
-  $('#bl-grid').innerHTML = list.slice(0, 200).map((p) => {
+  const inCat = B.catalog.products.filter((p) => B.cat === 'all' || p.categoryId === B.cat);
+  const { list, fuzzy } = searchProducts(inCat, B.q);
+  const otherBtn = `<button type="button" class="bl-other-add" data-other="${escapeHtml(B.q)}">
+      <span class="bl-noimg">✍</span>
+      <span><strong>${B.q ? `Add “${escapeHtml(B.q)}” as an other item` : 'Item not in the list?'}</strong>
+        <small>Type its name and price. Quick, and admins can add it to the price list later.</small></span>
+      <span class="bl-plus" aria-hidden="true">＋</span>
+    </button>`;
+  $('#bl-grid').innerHTML = (fuzzy ? `<p class="bl-fuzzy">No exact match for “${escapeHtml(B.q)}”. Close spellings:</p>` : '')
+    + list.slice(0, 200).map((p) => {
     const qty = lines[p.id] ?? 0;
     return `<div class="bl-item${qty ? ' in-bill' : ''}" data-id="${p.id}" data-add="${p.id}" role="button" tabindex="0" aria-label="Add ${escapeHtml(p.name)}">
         ${thumbHtml(p.id)}
@@ -242,27 +336,41 @@ function renderSearch() {
           <b class="bl-price">${formatRupees(p.finalPrice)}${p.amount > p.finalPrice ? ` <s>${formatRupees(p.amount)}</s>` : ''}</b></span>
         ${qty ? stepperHtml(qty) : '<span class="bl-plus" aria-hidden="true">＋</span>'}
       </div>`;
-  }).join('') || '<p class="muted bl-empty">No items match.</p>';
+  }).join('')
+    // Few or no results for typed text: offer the quick "other item" right there.
+    + (B.q && list.length <= 6 ? (list.length ? '' : `<p class="muted bl-empty">No items match “${escapeHtml(B.q)}”.</p>`) + otherBtn : '');
   $('#bl-results-note').textContent = list.length > 200 ? `Showing 200 of ${list.length}. Type more to narrow down.` : '';
 }
 
-function renderMatches(matches, note = '') {
+/**
+ * Scan suggestions. Only the small Add / Swap button on each row adds anything (not the whole row), so a thumb
+ * resting on the screen does not add items; taps in the first moment after the list appears are ignored.
+ * `swapFor` = the item a sure scan just added: the buttons then replace it instead of adding a second item.
+ */
+function renderMatches(matches, note = '', { swapFor = null, ok = false, other = false } = {}) {
   const el = $('#bl-matches');
-  if (!matches.length) {
-    el.innerHTML = note ? `<p class="muted">${escapeHtml(note)}</p>` : '';
+  B.matchesAt = Date.now();
+  const noteHtml = note ? `<p class="${ok ? 'bl-note' : 'muted'}">${escapeHtml(note)}</p>` : '';
+  const otherHtml = other ? '<button type="button" class="btn btn-sm btn-soft bl-other-inline" data-other="">✍ Not found? Add as other item</button>' : '';
+  const rows = matches.map((m) => {
+    const p = product(m.id);
+    if (!p) return '';
+    return `<div class="bl-match">
+        ${thumb(p.id) ? `<img src="${escapeHtml(thumb(p.id))}" alt="" />` : '<span class="bl-noimg"></span>'}
+        <span><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.brand ?? '')} · ${formatRupees(p.finalPrice)} · ${m.score >= SURE_POINTS ? 'strong' : m.score > 0 ? 'possible' : 'by colour'}</small></span>
+        ${swapFor
+          ? `<button type="button" class="bl-pick-btn" data-swap="${p.id}" data-from="${swapFor}">Swap</button>`
+          : `<button type="button" class="bl-pick-btn" data-pick="${p.id}">＋ Add</button>`}
+      </div>`;
+  }).join('');
+  if (!rows) {
+    el.innerHTML = noteHtml + otherHtml;
     return;
   }
-  el.innerHTML = (note ? `<p class="bl-note">${escapeHtml(note)}</p>` : '<p class="muted bl-pick">Tap the right item:</p>')
-    + matches.map((m) => {
-      const p = product(m.id);
-      if (!p) return '';
-      return `<button type="button" class="bl-match" data-add="${p.id}">
-          ${thumb(p.id) ? `<img src="${escapeHtml(thumb(p.id))}" alt="" />` : ''}
-          <span><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.brand ?? '')} · ${formatRupees(p.finalPrice)}</small></span>
-          <em>${m.score >= SURE_POINTS ? 'strong' : m.score > 0 ? 'possible' : 'by colour'}</em>
-        </button>`;
-    }).join('');
+  el.innerHTML = (noteHtml || '<p class="muted bl-pick">Is it one of these? Tap <strong>＋ Add</strong> on the right one:</p>') + rows + otherHtml;
 }
+
+const tooSoon = () => Date.now() - B.matchesAt < TAP_GUARD_MS;
 
 function renderAll() {
   if (!B.opened) return;
@@ -290,30 +398,69 @@ function setView(view) {
   if (view === 'search' && changed) setTimeout(() => $('#bl-q').focus(), 50);
 }
 
+function renderShutter() {
+  const s = $('#bl-shutter');
+  // With Auto on, the camera adds boxes by itself; the big button pauses it instead of scanning a second time.
+  s.textContent = B.auto ? '⏸ Pause auto' : '📷 Scan item';
+  s.classList.toggle('auto-on', B.auto);
+  $('#bl-auto').checked = B.auto;
+}
+
+function setAuto(on) {
+  B.auto = on;
+  localStorage.setItem('bfw.billing.auto', on ? '1' : '0');
+  B.lockId = null;
+  B.lastTop = null;
+  renderShutter();
+  if (on) {
+    renderMatches([], 'Auto: hold one box at a time inside the square.');
+    startAuto();
+  } else {
+    stopAuto();
+    renderMatches([], 'Auto paused. Tap 📷 Scan item for each box.');
+  }
+}
+
 // ── Cart actions ───────────────────────────────────────────
 function addItem(id, n = 1, { quiet = false } = {}) {
   const p = product(id);
   if (!p) return;
   const bill = activeBill() ?? newBill();
   bill.lines[id] = (bill.lines[id] ?? 0) + n;
-  if (bill.lines[id] <= 0) delete bill.lines[id];
-  else if (n > 0) (bill.touched ??= {})[id] = Date.now();
+  if (bill.lines[id] <= 0) {
+    delete bill.lines[id];
+    forgetOther(bill, id);
+  } else if (n > 0) (bill.touched ??= {})[id] = Date.now();
   B.lastAdded = n > 0 ? id : null;
   saveOpenBills();
   renderAll();
   if (!quiet) {
     feedback();
-    if (B.view === 'scan') showUndo(p); // in Search the row itself shows the new quantity
+    if (B.view === 'scan') showUndo(p, '#bl-added'); // over the camera
   }
 }
 
-let undoTimer;
-function showUndo(p) {
-  const el = $('#bl-added');
+/** Adds from a scan, unless this same box was just added (Auto and a tap, or two quick taps on one box). */
+function addScanned(id) {
+  const now = Date.now();
+  if (B.lastScanAdd.id === id && now - B.lastScanAdd.at < SAME_SCAN_MS) return false;
+  B.lastScanAdd = { id, at: now };
+  addItem(id);
+  return true;
+}
+
+const undoTimers = {};
+function showUndo(p, sel) {
+  const el = $(sel);
   el.innerHTML = `<span>✓ Added <strong>${escapeHtml(p.name)}</strong></span><button type="button" data-undo="${p.id}">Undo</button>`;
   el.hidden = false;
-  clearTimeout(undoTimer);
-  undoTimer = setTimeout(() => { el.hidden = true; }, 3000);
+  clearTimeout(undoTimers[sel]);
+  undoTimers[sel] = setTimeout(() => { el.hidden = true; }, sel === '#bl-added' ? 3000 : 4000);
+}
+
+/** Removes an other item's name and price once its line is gone. */
+function forgetOther(bill, id) {
+  if (isOtherId(id) && !bill.lines[id] && bill.custom) delete bill.custom[id];
 }
 
 function setQty(id, qty) {
@@ -321,10 +468,108 @@ function setQty(id, qty) {
   if (!bill) return;
   const n = Math.max(0, Math.min(9999, Math.floor(Number(qty) || 0)));
   if (n) bill.lines[id] = n;
-  else delete bill.lines[id];
+  else {
+    delete bill.lines[id];
+    forgetOther(bill, id);
+  }
   B.lastAdded = null;
   saveOpenBills();
   renderAll();
+}
+
+/** After a tap on a typed search result: empty the box (and the category) so the next item can be typed at once. */
+function readyForNextSearch(p) {
+  if (B.view !== 'search' || !B.q) return;
+  const q = $('#bl-q');
+  q.value = '';
+  B.q = '';
+  B.cat = 'all';
+  renderSearch();
+  showUndo(p, '#bl-s-added');
+  q.focus();
+  window.scrollTo({ top: $('#tab-billing').offsetTop - 8, behavior: 'instant' });
+}
+
+// ── Other items (not in the price list) ────────────────────
+const recentOthers = () => {
+  try { return JSON.parse(localStorage.getItem(RECENT_OTHER_KEY) || '[]'); } catch { return []; }
+};
+function rememberOther(name, price) {
+  const list = recentOthers().filter((o) => norm(o.name) !== norm(name));
+  list.unshift({ name, price });
+  try { localStorage.setItem(RECENT_OTHER_KEY, JSON.stringify(list.slice(0, 8))); } catch { /* fine */ }
+}
+
+function openOther(prefill = '') {
+  const dlg = $('#bl-other-dialog');
+  const recent = recentOthers();
+  dlg.innerHTML = `<div class="d-head"><h2>✍ Other item</h2><button class="close" type="button" data-act="close" aria-label="Close">✕</button></div>
+    <form class="d-body a-form" id="bl-other-form" novalidate autocomplete="off">
+      <p class="muted">For a box that is not in the price list or will not scan. It goes on the bill like any item, and admins see it under <strong>Sales → Not in the price list</strong> to add it later.</p>
+      ${recent.length ? `<div class="bl-other-recent"><small>Used recently</small><div>${recent.map((o, i) => `<button type="button" class="chip" data-recent="${i}">${escapeHtml(o.name)} · ${formatRupees(o.price)}</button>`).join('')}</div></div>` : ''}
+      <label>Item name <input name="name" maxlength="60" required value="${escapeHtml(prefill)}" placeholder="e.g. Gold 1000 wala" /></label>
+      <div class="two-col">
+        <label>Price ₹ per box <input name="price" type="number" inputmode="decimal" min="1" step="0.01" required /></label>
+        <label>Quantity
+          <div class="bl-step bl-step-lg"><button type="button" data-oq="-1" aria-label="One less">−</button><input name="qty" type="number" inputmode="numeric" min="1" value="1" /><button type="button" data-oq="1" aria-label="One more">+</button></div>
+        </label>
+      </div>
+      <p class="a-error" id="bl-other-error" hidden></p>
+      <button class="btn btn-primary btn-block" type="submit">Add to bill</button>
+    </form>`;
+  dlg.showModal();
+  const f = $('#bl-other-form');
+  setTimeout(() => (prefill ? f.price : f.name).focus(), 60);
+  f.addEventListener('click', (e) => {
+    const r = e.target.closest('[data-recent]');
+    if (r) {
+      const o = recent[Number(r.dataset.recent)];
+      f.name.value = o.name;
+      f.price.value = o.price;
+      return f.qty.focus();
+    }
+    const step = e.target.closest('[data-oq]');
+    if (step) f.qty.value = Math.max(1, (Number(f.qty.value) || 1) + Number(step.dataset.oq));
+  });
+  f.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = f.name.value.trim().replace(/\s+/g, ' ');
+    const price = Math.round(Number(f.price.value) * 100) / 100;
+    const qty = Math.min(9999, Math.max(1, Math.floor(Number(f.qty.value) || 1)));
+    const err = $('#bl-other-error');
+    if (name.length < 2) {
+      err.textContent = 'Type the item name.';
+      err.hidden = false;
+      return f.name.focus();
+    }
+    if (!(price > 0)) {
+      err.textContent = 'Type the price for one box.';
+      err.hidden = false;
+      return f.price.focus();
+    }
+    dlg.close(); // first, so focus can then go to the search box
+    addOther(name, price, qty);
+  });
+}
+
+function addOther(name, price, qty) {
+  const bill = activeBill() ?? newBill();
+  bill.custom ??= {};
+  // Same name and price again on this bill: just more of it.
+  let id = Object.keys(bill.custom).find((k) => norm(bill.custom[k].name) === norm(name) && bill.custom[k].price === price);
+  if (!id) {
+    id = `x-${crypto.randomUUID().slice(0, 8)}`;
+    bill.custom[id] = { name, price };
+  }
+  rememberOther(name, price);
+  addItem(id, qty, { quiet: true });
+  feedback();
+  const p = product(id);
+  if (B.view === 'search') {
+    if (B.q) readyForNextSearch(p);
+    else showUndo(p, '#bl-s-added');
+  } else if (B.view === 'scan') showUndo(p, '#bl-added');
+  else B.ctx.toast(`Added ${name}`);
 }
 
 /** "Cancel & re-bill" from the Bills list: a new open bill with the same items, ready to fix and check out. */
@@ -332,6 +577,13 @@ export function startBillFrom(items) {
   const bill = newBill();
   let missing = 0;
   for (const it of items ?? []) {
+    if (it.custom) {
+      const id = `x-${crypto.randomUUID().slice(0, 8)}`;
+      (bill.custom ??= {})[id] = { name: it.name, price: Number(it.finalPrice) };
+      bill.lines[id] = Number(it.qty || 0);
+      bill.touched[id] = Date.now();
+      continue;
+    }
     if (!product(it.id)) {
       missing++;
       continue;
@@ -389,32 +641,42 @@ function stopCamera() {
 
 async function scanOnce({ auto = false } = {}) {
   if (!B.stream) return startCamera();
-  if (!B.scanReady) return renderMatches([], 'No item photos are ready for scanning yet.');
+  if (!B.scanReady) return renderMatches([], 'No item photos are ready for scanning yet.', { other: true });
+  if (B.scanning) return; // one scan at a time: a tap during an Auto scan must not add the box twice
+  if (auto && (!B.auto || $('dialog[open]'))) return;
+  B.scanning = true;
   const shutter = $('#bl-shutter');
   if (!auto) shutter.disabled = true;
   try {
     const matches = await matchFrame($('#bl-video'), 4);
     if (auto) {
+      if (!B.auto) return; // paused while this scan ran
       const top = matches[0];
       if (!top || top.score < 6) B.lockId = null; // camera moved away: the same item may be added again
+      // Auto shows only a status line: nothing tappable that a finger could hit while the list changes.
       if (isConfident(matches) && top.id === B.lastTop && top.id !== B.lockId) {
         B.lockId = top.id;
+        // The lock (cleared only when the camera sees no box) already stops repeats, so a second box of the
+        // same item shown after moving the first away is added.
+        B.lastScanAdd = { id: top.id, at: Date.now() };
         addItem(top.id);
-        renderMatches(matches.slice(0, 3), `Added ${product(top.id)?.name}. Show the next box.`);
-      } else {
-        renderMatches(matches.slice(0, 3), isConfident(matches) ? 'Hold steady…' : 'Looking…');
+        renderMatches([], `✓ ${product(top.id)?.name}. Move it away, then show the next box.`, { ok: true });
+      } else if (top?.id !== B.lockId || !top) {
+        renderMatches([], isConfident(matches) ? 'Hold steady…' : 'Looking… hold one box inside the square.');
       }
       B.lastTop = top?.id ?? null;
     } else if (isConfident(matches)) {
-      addItem(matches[0].id);
-      renderMatches(matches.slice(1, 3), `Added ${product(matches[0].id)?.name}. Wrong item? Tap Undo or pick below.`);
+      const id = matches[0].id;
+      if (addScanned(id)) renderMatches(matches.slice(1, 3), `✓ Added ${product(id)?.name}. Wrong item? Swap it below or tap Undo.`, { swapFor: id, ok: true });
+      else renderMatches([], `${product(id)?.name} was just added. For more boxes of it, use + on the bill.`);
     } else {
-      renderMatches(matches, matches.length ? '' : 'Nothing recognised. Try again closer, or use Search.');
+      renderMatches(matches, matches.length ? '' : 'Nothing recognised. Try again closer, or use Search.', { other: true });
     }
   } catch (err) {
     console.error(err);
     renderMatches([], `Scanner error: ${err.message}`);
   } finally {
+    B.scanning = false;
     shutter.disabled = false;
   }
 }
@@ -591,6 +853,7 @@ async function saveCurrentBill(t, f) {
     items: t.lines.map(({ product: p, qty, lineTotal }) => ({
       id: p.id, listNo: p.listNo, name: p.name, brand: p.brand ?? '', qty,
       amount: p.amount, finalPrice: p.finalPrice, lineTotal: toRupees(lineTotal),
+      ...(p.custom ? { custom: true } : {}),
     })),
     totals: {
       itemCount: t.itemCount,
@@ -731,7 +994,7 @@ export async function setupBilling(ctx) {
     B.active = open.bills.some((b) => b.id === open.active) ? open.active : open.bills[0].id;
   }
   B.auto = localStorage.getItem('bfw.billing.auto') === '1';
-  $('#bl-auto').checked = B.auto;
+  renderShutter();
 
   const panel = $('#tab-billing');
   panel.addEventListener('click', (e) => {
@@ -758,8 +1021,28 @@ export async function setupBilling(ctx) {
       return setQty(id, (activeBill().lines[id] ?? 0) + Number(q.dataset.q));
     }
     if (t.closest('.bl-step')) return; // tapping the number box just edits it
+    const other = t.closest('[data-other]');
+    if (other) return openOther(other.dataset.other ?? '');
     const add = t.closest('[data-add]');
-    if (add) return addItem(add.dataset.add);
+    if (add) {
+      addItem(add.dataset.add);
+      return readyForNextSearch(product(add.dataset.add)); // typed search only: clear the box for the next item
+    }
+    // Scan suggestions: only the Add / Swap buttons count, and not in the first moment after the list appeared.
+    const pick = t.closest('[data-pick]');
+    if (pick) {
+      if (tooSoon()) return;
+      addScanned(pick.dataset.pick);
+      return renderMatches([], `✓ Added ${product(pick.dataset.pick)?.name}.`, { ok: true });
+    }
+    const swap = t.closest('[data-swap]');
+    if (swap) {
+      if (tooSoon()) return;
+      addItem(swap.dataset.from, -1, { quiet: true });
+      addItem(swap.dataset.swap);
+      B.lastScanAdd = { id: swap.dataset.swap, at: Date.now() };
+      return renderMatches([], `✓ Swapped to ${product(swap.dataset.swap)?.name}.`, { ok: true });
+    }
     const cat = t.closest('[data-cat]');
     if (cat && t.closest('#bl-cats')) {
       B.cat = cat.dataset.cat;
@@ -768,10 +1051,11 @@ export async function setupBilling(ctx) {
     const undo = t.closest('[data-undo]');
     if (undo) {
       addItem(undo.dataset.undo, -1, { quiet: true });
-      $('#bl-added').hidden = true;
+      undo.parentElement.hidden = true;
+      if (B.lastScanAdd.id === undo.dataset.undo) B.lastScanAdd = { id: null, at: 0 };
       return;
     }
-    if (t.closest('#bl-shutter')) return scanOnce();
+    if (t.closest('#bl-shutter')) return B.auto ? setAuto(false) : scanOnce();
     if (t.closest('#bl-checkout')) return openCheckout();
     if (t.closest('#bl-sync')) return syncNow();
     if (t.closest('#bl-bills-btn')) return B.ctx.openBills();
@@ -785,6 +1069,7 @@ export async function setupBilling(ctx) {
     if (t.closest('#bl-clear') && activeBill() && Object.keys(activeBill().lines).length && confirm('Remove all items from this bill?')) {
       activeBill().lines = {};
       activeBill().touched = {};
+      activeBill().custom = {};
       saveOpenBills();
       return renderAll();
     }
@@ -804,19 +1089,23 @@ export async function setupBilling(ctx) {
   });
   panel.addEventListener('change', (e) => {
     if (e.target.dataset.q === 'set') setQty(e.target.closest('[data-id]').dataset.id, e.target.value);
-    if (e.target.id === 'bl-auto') {
-      B.auto = e.target.checked;
-      localStorage.setItem('bfw.billing.auto', B.auto ? '1' : '0');
-      B.lockId = null;
-      if (B.auto) startAuto();
-      else stopAuto();
-    }
+    if (e.target.id === 'bl-auto') setAuto(e.target.checked);
   });
   $('#bl-q').addEventListener('input', (e) => {
     B.q = e.target.value.trim();
     renderSearch();
   });
-  for (const id of ['#bl-checkout-dialog', '#bl-done-dialog']) {
+  // Enter in the search box adds the only result (or the top one), then the box is ready for the next item.
+  $('#bl-q').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !B.q) return;
+    e.preventDefault();
+    const first = $('#bl-grid [data-add]');
+    if (first) {
+      addItem(first.dataset.add);
+      readyForNextSearch(product(first.dataset.add));
+    } else openOther(B.q);
+  });
+  for (const id of ['#bl-checkout-dialog', '#bl-done-dialog', '#bl-other-dialog']) {
     const dlg = $(id);
     dlg.addEventListener('click', (e) => {
       if (e.target === dlg || e.target.closest('[data-act="close"]')) dlg.close();

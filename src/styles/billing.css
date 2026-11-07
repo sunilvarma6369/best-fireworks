@@ -658,3 +658,164 @@ body.counter-mode #alert-setup,
 body.counter-mode #new-banner {
   display: none !important;
 }
+
+/* ── Quick fixes (v1.3) ─────────────────────────────────── */
+/* Nothing may make the staff app slide sideways */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
+#bl-bills,
+#bl-cats {
+  overscroll-behavior-x: contain;
+}
+
+/* Scan row: Scan (or Pause while Auto is on) · Auto · Other */
+.bl-scan-actions {
+  gap: 0.5rem;
+}
+.bl-scan-actions .bl-shutter {
+  min-width: 0;
+  padding-inline: 0.6rem;
+  white-space: nowrap;
+}
+.bl-shutter.auto-on {
+  background: #1b2130;
+  color: #fff;
+  font-size: 0.95rem;
+}
+.bl-other-btn {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 0.65rem;
+  white-space: nowrap;
+}
+
+/* Scan suggestions: only the button on the right adds */
+.bl-match {
+  cursor: default;
+}
+.bl-match .bl-noimg {
+  width: 46px;
+  height: 46px;
+}
+.bl-pick-btn {
+  min-width: 72px;
+  min-height: 40px;
+  padding: 0 0.7rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.bl-pick-btn[data-swap] {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border) inset;
+}
+.bl-other-inline {
+  justify-self: start;
+}
+
+/* Search box row and the "added" line under it */
+.bl-q-row {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+}
+.bl-q-row input[type='search'] {
+  flex: 1;
+  min-width: 0;
+}
+.bl-added.bl-s-added {
+  position: static;
+  width: auto;
+  max-width: none;
+  margin: 0 0 0.45rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.8rem;
+  justify-content: space-between;
+  border-radius: 10px;
+  transform: none;
+  box-shadow: none;
+}
+.bl-fuzzy {
+  margin: 0.2rem 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+/* Other items */
+.bl-noimg {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 1.2rem;
+}
+.bl-other-add {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 60px;
+  padding: 0.35rem 0.5rem 0.35rem 0.35rem;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bl-other-add strong {
+  display: block;
+  font-size: 0.88rem;
+}
+.bl-other-add small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.bl-other-tag {
+  padding: 0 0.35rem;
+  border-radius: 6px;
+  background: var(--gold-soft, #fff4d6);
+  color: var(--gold-ink, #7a5200);
+  font-weight: 700;
+}
+.bl-other-recent small {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--muted);
+}
+.bl-other-recent div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.bl-other-recent .chip {
+  min-height: 34px;
+  padding: 0.25rem 0.7rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.bl-step-lg {
+  display: flex;
+  width: 100%;
+}
+.bl-step-lg input {
+  flex: 1;
+  height: 44px;
+}
+.bl-step-lg button {
+  height: 44px;
+}

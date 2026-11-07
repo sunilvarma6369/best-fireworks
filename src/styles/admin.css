@@ -1510,3 +1510,37 @@ body:not([data-role='super']) .super-only {
 .bm-row + .bm-row {
   margin-top: 0.4rem;
 }
+
+/* Long item names must wrap, not push the Edit button off the screen */
+.p-row .p-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Sales: items sold that are not in the price list */
+.nl-card {
+  box-shadow: 0 0 0 1.5px var(--amber, #f5a524) inset, var(--shadow);
+}
+.nl-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--border);
+}
+.nl-row > div {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.nl-row small {
+  display: block;
+  color: var(--muted);
+}
+.nl-row .btn {
+  flex-shrink: 0;
+}
+.nl-row .nl-skip {
+  min-width: 36px;
+  padding: 0 0.5rem;
+}

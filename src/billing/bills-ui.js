@@ -145,7 +145,7 @@ function itemsTable(b) {
   return `<table class="items">
       <thead><tr><th>Item</th><th class="num">Rate</th><th class="num">Qty</th><th class="num">Total</th></tr></thead>
       <tbody>${(b.items ?? []).map((i) => `<tr>
-          <td>${escapeHtml(i.name)}<br /><small class="muted">${escapeHtml(i.brand ?? '')}${i.listNo ? ` · #${i.listNo}` : ''}</small></td>
+          <td>${escapeHtml(i.name)}<br /><small class="muted">${i.custom ? '<span class="bl-other-tag">Other item</span>' : escapeHtml(i.brand ?? '')}${i.listNo ? ` · #${i.listNo}` : ''}</small></td>
           <td class="num">${formatRupees(i.finalPrice ?? 0)}</td><td class="num">${i.qty}</td><td class="num">${formatRupees(i.lineTotal ?? 0)}</td>
         </tr>`).join('')}</tbody>
       <tfoot>

@@ -206,11 +206,13 @@ export function computeCounter(bills, { range = 'all', categoryOf, today }) {
       c.revenue += line;
       c.boxes += it.qty;
       categories.set(cat.id, c);
-      const i = items.get(it.id) ?? { id: it.id, name: it.name, brand: it.brand, category: cat.name, revenue: 0, boxes: 0, orders: 0 };
+      // Other items (typed in at the counter) have a new id on every bill: count them by name.
+      const key = it.custom ? `other:${otherKey(it.name)}` : it.id;
+      const i = items.get(key) ?? { id: key, name: it.name, brand: it.brand, category: cat.name, revenue: 0, boxes: 0, orders: 0 };
       i.revenue += line;
       i.boxes += it.qty;
       i.orders++;
-      items.set(it.id, i);
+      items.set(key, i);
       sections[cat.section === 'standard' ? 'standard' : 'others'] += line;
     }
   }
@@ -246,6 +248,40 @@ export function computeCounter(bills, { range = 'all', categoryOf, today }) {
     from,
     to,
   };
+}
+
+/** How other-item names are compared: "Gold 1000-Wala" and "gold 1000 wala" are the same item. */
+export const otherKey = (name) => String(name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * Items sold at the counter that are not in the price list ("Other item"), over the whole season, newest first.
+ * Cancelled bills are left out.
+ */
+export function otherItems(bills) {
+  const map = new Map();
+  for (const b of bills) {
+    if (b.status === 'void') continue;
+    for (const it of b.items ?? []) {
+      if (!it.custom) continue;
+      const key = otherKey(it.name);
+      if (!key) continue;
+      const row = map.get(key) ?? { key, name: it.name, boxes: 0, bills: 0, revenue: 0, minPrice: Infinity, maxPrice: 0, lastPrice: 0, lastAt: '', by: new Set() };
+      const price = Number(it.finalPrice) || 0;
+      row.boxes += Number(it.qty) || 0;
+      row.bills++;
+      row.revenue += toPaise(it.lineTotal ?? 0);
+      row.minPrice = Math.min(row.minPrice, price);
+      row.maxPrice = Math.max(row.maxPrice, price);
+      if ((b.billedAt ?? '') >= row.lastAt) {
+        row.lastAt = b.billedAt ?? '';
+        row.lastPrice = price;
+        row.name = it.name;
+      }
+      if (b.cashierName) row.by.add(b.cashierName);
+      map.set(key, row);
+    }
+  }
+  return [...map.values()].map((r) => ({ ...r, by: [...r.by] })).sort((a, b) => (b.lastAt > a.lastAt ? 1 : -1));
 }
 
 /** Item or category totals from both channels, for the "All sales" view. */

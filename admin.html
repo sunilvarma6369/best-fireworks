@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>Shop Admin – Best FireWorks</title>
     <meta name="theme-color" content="#b3161f" />
     <meta name="robots" content="noindex" />
@@ -120,13 +120,18 @@
           <div class="bl-scan-actions">
             <button type="button" class="btn btn-primary bl-shutter" id="bl-shutter">📷 Scan item</button>
             <label class="switch"><input type="checkbox" id="bl-auto" /> Auto</label>
+            <button type="button" class="btn btn-soft bl-other-btn" data-other="" aria-label="Add an item that is not in the list">✍ Other</button>
           </div>
           <div class="bl-matches" id="bl-matches"></div>
           <div class="bl-recent" id="bl-recent"></div>
         </section>
         <section id="bl-search" hidden>
           <div class="bl-search-head">
-            <input type="search" id="bl-q" placeholder="Search name, brand or #number" autocomplete="off" />
+            <div class="bl-q-row">
+              <input type="search" id="bl-q" placeholder="Item name or number" autocomplete="off" enterkeyhint="done" aria-label="Find an item" />
+              <button type="button" class="btn btn-soft bl-other-btn" data-other="" aria-label="Add an item that is not in the list">✍ Other</button>
+            </div>
+            <div class="bl-added bl-s-added" id="bl-s-added" role="status" hidden></div>
             <div class="chips" id="bl-cats"></div>
           </div>
           <div class="bl-grid" id="bl-grid"></div>
@@ -138,6 +143,7 @@
           <div id="bl-sum-mini"></div>
           <div class="bl-bill-actions">
             <button type="button" class="btn btn-sm btn-soft" id="bl-hold">⏸ Hold &amp; start a new bill</button>
+            <button type="button" class="btn btn-sm btn-soft" data-other="">✍ Other item</button>
             <button type="button" class="btn btn-sm btn-soft" id="bl-clear">Clear items</button>
             <button type="button" class="btn btn-sm btn-danger" id="bl-drop">Delete bill</button>
           </div>
@@ -299,6 +305,7 @@
 
     <dialog class="a-dialog" id="bl-checkout-dialog" aria-label="Checkout"></dialog>
     <dialog class="a-dialog" id="bl-done-dialog" aria-label="Bill saved"></dialog>
+    <dialog class="a-dialog" id="bl-other-dialog" aria-label="Other item"></dialog>
     <!-- Bills list, then one bill on top of it (keep this order: the back button closes the last open dialog) -->
     <dialog class="a-dialog" id="bills-dialog" aria-label="Bills"></dialog>
     <dialog class="a-dialog" id="bill-dialog" aria-label="Bill"></dialog>
